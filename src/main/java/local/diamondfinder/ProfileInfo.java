@@ -23,14 +23,20 @@ public final class ProfileInfo {
     private static final Pattern LEAD = Pattern.compile("^[\\s:：\\-–—>»]+");
     private static final String MONTHS = "января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря";
     private static final Pattern DATE = Pattern.compile(
-        "(?iu)\\d{1,2}[./-]\\d{1,2}[./-]\\d{2,4}(?:[ ,T]+\\d{1,2}:\\d{2}(?::\\d{2})?)?|\\d{4}[./-]\\d{1,2}[./-]\\d{1,2}|\\d{1,2}\\s+(?:января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)\\s+\\d{4}(?:\\s*г\\.?)?",
-        2
+        "(?iu)\\d{1,2}[./-]\\d{1,2}[./-]\\d{2,4}(?:[ ,T]+\\d{1,2}:\\d{2}(?::\\d{2})?)?|\\d{4}[./-]\\d{1,2}[./-]\\d{1,2}|\\d{1,2}\\s+(?:" + MONTHS + ")\\s+\\d{4}(?:\\s*г\\.?)?",
+        Pattern.CASE_INSENSITIVE
     );
-    private static final Pattern RANK = Pattern.compile("(?iu)(привилеги\\p{L}*|ранг|донат\\p{L}*|группа|rank)", 2);
-    private static final Pattern REG = Pattern.compile("(?iu)(регистрац\\p{L}*|зарегистр\\p{L}*|registered|дата рег)", 2);
-    private static final Pattern LEVEL = Pattern.compile("(?iu)(уров\\p{L}*|лвл|lvl|level)\\D{0,4}?(\\d+)", 2);
-    private static final Pattern EFFECT = Pattern.compile("(?iu)эффект\\p{L}*\\s*[:：\\-–—]?\\s*(.*)", 2);
+    private static final Pattern RANK = Pattern.compile("(?iu)(привилеги\\p{L}*|ранг|донат\\p{L}*|группа|rank)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern REG = Pattern.compile("(?iu)(регистрац\\p{L}*|зарегистр\\p{L}*|registered|дата рег)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern LEVEL = Pattern.compile("(?iu)(уров\\p{L}*|лвл|lvl|level)\\D{0,4}?(\\d+)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern EFFECT = Pattern.compile("(?iu)эффект\\p{L}*\\s*[:：\\-–—]?\\s*(.*)", Pattern.CASE_INSENSITIVE);
     private static final Pattern TAB_LEVEL = Pattern.compile("\\[\\s*(\\d{1,4})\\s*\\]");
+    private static final int RANK_COLOR = -1;
+    private static final int REG_COLOR = 0xFF9AA5B8;
+    private static final int GOOD_COLOR = 0xFF7EE7A1;
+    private static final int BAD_COLOR = 0xFFFF6B6B;
+    private static final int SEPARATOR_COLOR = 0xFF5C6475;
+    private static final int MAX_RETRIES = 8;
     private static final Map<String, String> TAB = new HashMap<>();
     private static final Map<String, String> EFFECTS = new HashMap<>();
     private static final Map<String, Integer> RETRIES = new HashMap<>();
@@ -43,437 +49,464 @@ public final class ProfileInfo {
     private ProfileInfo() {
     }
 
-    private static String clean(String var0) {
-        if (var0 == null) {
+    private static String clean(String text) {
+        if (text == null) {
             return "";
         }
 
-        var0 = FMT.matcher(var0).replaceAll("");
-        var0 = JUNK.matcher(var0).replaceAll("");
-        return var0.replaceAll("\\s+", " ").trim();
+        text = FMT.matcher(text).replaceAll("");
+        text = JUNK.matcher(text).replaceAll("");
+        return text.replaceAll("\\s+", " ").trim();
     }
 
-    private static String keepGlyphs(String var0) {
-        if (var0 == null) {
+    private static String keepGlyphs(String text) {
+        if (text == null) {
             return "";
         }
 
-        var0 = FMT.matcher(var0).replaceAll("");
-        return var0.replaceAll("[ \\t\\r\\n]+", " ").trim();
+        text = FMT.matcher(text).replaceAll("");
+        return text.replaceAll("[ \\t\\r\\n]+", " ").trim();
     }
 
-    private static String esc(String var0) {
-        StringBuilder var1 = new StringBuilder();
+    private static String esc(String text) {
+        StringBuilder out = new StringBuilder();
 
-        for (char var5 : (var0 == null ? "" : var0).toCharArray()) {
-            if (Character.getType(var5) == 18) {
-                var1.append(String.format("\\u%04X", Integer.valueOf(var5)));
-            } else if (var5 == 167) {
-                var1.append("§");
+        for (char c : (text == null ? "" : text).toCharArray()) {
+            if (Character.getType(c) == Character.PRIVATE_USE) {
+                out.append(String.format("\\u%04X", (int) c));
             } else {
-                var1.append(var5);
+                out.append(c);
             }
         }
 
-        return var1.toString();
+        return out.toString();
     }
 
-    private static String cut(String var0, int var1) {
-        return var0.length() <= var1 ? var0 : var0.substring(0, var1 - 1) + "…";
+    private static String cut(String text, int max) {
+        return text.length() <= max ? text : text.substring(0, max - 1) + "…";
     }
 
-    public static void capture(MenuScanner.Result var0, List<DiamondMenus.Cell> var1) {
-        if (var0 != null && var1 != null) {
-            clearRetries(var0.player);
+    public static void capture(MenuScanner.Result result, List<DiamondMenus.Cell> cells) {
+        if (result == null || cells == null) {
+            return;
+        }
 
-            try {
-                if (!var0.player.equals(effectPlayer)) {
-                    EFFECTS.clear();
-                    effectPlayer = var0.player;
-                }
+        clearRetries(result.player);
 
-                dump(var0, var1);
-                if (var0.rank == null) {
-                    String var2 = var0.player.toLowerCase(Locale.ROOT);
-
-                    for (DiamondMenus.Cell var4 : var1) {
-                        String var5 = keepGlyphs(var4.name());
-                        int var6 = var5.toLowerCase(Locale.ROOT).lastIndexOf(var2);
-                        if (var6 >= 0 && (var6 <= 0 || !Character.isLetterOrDigit(var5.charAt(var6 - 1)))) {
-                            String var7 = var5.substring(0, var6).trim();
-                            if (var7.startsWith("[") && var7.endsWith("]") && var7.length() > 2) {
-                                var7 = var7.substring(1, var7.length() - 1).trim();
-                            }
-
-                            if (!var7.isEmpty()) {
-                                var0.rank = cut(var7, 24);
-                            }
-                            break;
-                        }
-                    }
-                }
-
-                ArrayList<List<String>> var10 = new ArrayList<>();
-
-                for (DiamondMenus.Cell var15 : var1) {
-                    ArrayList<String> var21 = new ArrayList<>();
-                    var21.add(clean(var15.name()));
-                    if (var15.lore() != null) {
-                        for (String var33 : var15.lore()) {
-                            var21.add(clean(var33));
-                        }
-                    }
-
-                    var10.add(var21);
-                }
-
-                if (var0.regDate == null) {
-                    String var12 = null;
-
-                    label210:
-                    for (List<String> var22 : var10) {
-                        for (int var28 = 0; var28 < var22.size(); var28++) {
-                            if (REG.matcher((CharSequence)var22.get(var28)).find()) {
-                                var12 = find(DATE, (String)var22.get(var28));
-
-                                for (int var34 = var28 + 1; var12 == null && var34 < var22.size(); var34++) {
-                                    var12 = find(DATE, (String)var22.get(var34));
-                                }
-
-                                if (var12 == null && var28 > 0) {
-                                    var12 = find(DATE, (String)var22.get(0));
-                                }
-
-                                if (var12 != null) {
-                                    break label210;
-                                }
-                            }
-                        }
-                    }
-
-                    if (var12 == null) {
-                        for (List<String> var23 : var10) {
-                            String var29 = ((String)var23.get(0)).toLowerCase(Locale.ROOT);
-                            if (var29.contains("час") || var29.contains("врем") || var29.contains("clock") || var29.contains("дата")) {
-                                for (String var8 : var23) {
-                                    var12 = find(DATE, var8);
-                                    if (var12 != null) {
-                                        break;
-                                    }
-                                }
-                            }
-
-                            if (var12 != null) {
-                                break;
-                            }
-                        }
-                    }
-
-                    if (var12 == null) {
-                        for (List<String> var24 : var10) {
-                            for (String var36 : var24) {
-                                var12 = find(DATE, var36);
-                                if (var12 != null) {
-                                    break;
-                                }
-                            }
-
-                            if (var12 != null) {
-                                break;
-                            }
-                        }
-                    }
-
-                    if (var12 != null) {
-                        var0.regDate = cut(var12, 22);
-                    }
-                }
-
-                if (var0.level == null) {
-                    for (List<String> var19 : var10) {
-                        for (String var31 : var19) {
-                            Matcher var37;
-                            if (var0.level == null && !var31.toLowerCase(Locale.ROOT).contains("редкост") && (var37 = LEVEL.matcher(var31)).find()) {
-                                var0.level = var37.group(2);
-                            }
-                        }
-                    }
-                }
-
-                if (var0.rank == null) {
-                    for (List<String> var20 : var10) {
-                        for (int var26 = 0; var26 < var20.size() && var0.rank == null; var26++) {
-                            String var32 = (String)var20.get(var26);
-                            if (RANK.matcher(var32).find() && !var32.toLowerCase(Locale.ROOT).contains("редкост")) {
-                                Matcher var38 = RANK.matcher(var32);
-                                var38.find();
-                                String var39 = LEAD.matcher(var32.substring(var38.end())).replaceFirst("").trim();
-                                if (var39.isEmpty() && var26 + 1 < var20.size()) {
-                                    var39 = (String)var20.get(var26 + 1);
-                                }
-
-                                if (!var39.isEmpty()) {
-                                    var0.rank = cut(var39, 24);
-                                }
-                            }
-                        }
-                    }
-                }
-            } catch (Throwable var9) {
+        try {
+            if (!result.player.equals(effectPlayer)) {
+                EFFECTS.clear();
+                effectPlayer = result.player;
             }
+
+            dump(result, cells);
+            if (result.rank == null) {
+                result.rank = rankFromName(result.player, cells);
+            }
+
+            List<List<String>> items = new ArrayList<>();
+
+            for (DiamondMenus.Cell cell : cells) {
+                List<String> lines = new ArrayList<>();
+                lines.add(clean(cell.name()));
+                if (cell.lore() != null) {
+                    for (String line : cell.lore()) {
+                        lines.add(clean(line));
+                    }
+                }
+
+                items.add(lines);
+            }
+
+            if (result.regDate == null) {
+                String date = findRegDate(items);
+                if (date != null) {
+                    result.regDate = cut(date, 22);
+                }
+            }
+
+            if (result.level == null) {
+                result.level = findLevel(items);
+            }
+
+            if (result.rank == null) {
+                result.rank = findRank(items);
+            }
+        } catch (Throwable ignored) {
         }
     }
 
-    private static String find(Pattern var0, String var1) {
-        if (var1 == null) {
-            return null;
-        }
+    /** Привилегия обычно стоит перед ником в названии предмета: "[VIP] Nick". */
+    private static String rankFromName(String player, List<DiamondMenus.Cell> cells) {
+        String nick = player.toLowerCase(Locale.ROOT);
 
-        Matcher var2 = var0.matcher(var1);
-        return var2.find() ? var2.group().trim() : null;
-    }
-
-    private static void dump(MenuScanner.Result var0, List<DiamondMenus.Cell> var1) {
-        if (!dumped) {
-            dumped = true;
-
-            try {
-                Path var2 = Path.of("config", "diamond-finder");
-                Files.createDirectories(var2);
-                StringBuilder var3 = new StringBuilder("player: ").append(var0.player).append('\n');
-                String var4 = TAB.get(var0.player);
-                var3.append("tab-level: ").append(var4).append('\n');
-
-                for (DiamondMenus.Cell var6 : var1) {
-                    var3.append("slot ").append(var6.slot()).append(": ").append(esc(var6.name())).append('\n');
-                    if (var6.lore() != null) {
-                        for (String var8 : var6.lore()) {
-                            var3.append("    ").append(esc(var8)).append('\n');
-                        }
-                    }
+        for (DiamondMenus.Cell cell : cells) {
+            String name = keepGlyphs(cell.name());
+            int at = name.toLowerCase(Locale.ROOT).lastIndexOf(nick);
+            if (at >= 0 && (at <= 0 || !Character.isLetterOrDigit(name.charAt(at - 1)))) {
+                String prefix = name.substring(0, at).trim();
+                if (prefix.startsWith("[") && prefix.endsWith("]") && prefix.length() > 2) {
+                    prefix = prefix.substring(1, prefix.length() - 1).trim();
                 }
 
-                Files.writeString(var2.resolve("profile-dump.txt"), var3.toString());
-            } catch (Throwable var9) {
-            }
-        }
-    }
-
-    public static void noteMatch(String var0, String var1, List<String> var2) {
-        if (var0 != null) {
-            try {
-                String var3 = null;
-                if (var2 != null) {
-                    for (int var4 = 0; var4 < var2.size() && var3 == null; var4++) {
-                        String var5 = clean((String)var2.get(var4));
-                        Matcher var6 = EFFECT.matcher(var5);
-                        if (var6.find()) {
-                            String var7 = LEAD.matcher(var6.group(1)).replaceFirst("").trim();
-                            if (var7.isEmpty() && var4 + 1 < var2.size()) {
-                                var7 = clean((String)var2.get(var4 + 1));
-                            }
-
-                            var3 = var7.isEmpty() ? cut(var5, 28) : cut(var7, 28);
-                        }
-                    }
-                }
-
-                if (var3 != null) {
-                    EFFECTS.put(var0, var3);
-                }
-
-                if (itemDumps < 6 || var3 != null && effectDumps < 4) {
-                    itemDumps++;
-                    if (var3 != null) {
-                        effectDumps++;
-                    }
-
-                    StringBuilder var9 = new StringBuilder("item: ")
-                        .append(esc(var1))
-                        .append("  =>  key=")
-                        .append(var0)
-                        .append("  effect=")
-                        .append(var3)
-                        .append('\n');
-                    if (var2 != null) {
-                        for (String var12 : var2) {
-                            var9.append("    ").append(esc(var12)).append('\n');
-                        }
-                    }
-
-                    Path var11 = Path.of("config", "diamond-finder");
-                    Files.createDirectories(var11);
-                    Files.writeString(var11.resolve("item-dump.txt"), var9.toString(), StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-                }
-            } catch (Throwable var8) {
-            }
-        }
-    }
-
-    public static Map<String, String> takeEffects(String var0) {
-        HashMap var1 = new HashMap();
-        if (var0 != null && var0.equals(effectPlayer)) {
-            var1.putAll(EFFECTS);
-        }
-
-        EFFECTS.clear();
-        return var1;
-    }
-
-    public static void draw(FinderScreen var0, GuiGraphicsExtractor var1, MenuScanner.Result var2, int var3, int var4, int var5) {
-        if (var2 != null) {
-            String var6 = tabLevel(var2.player);
-            if (var6 != null) {
-                var2.level = var6;
-            }
-
-            ArrayList var7 = new ArrayList();
-            ArrayList var8 = new ArrayList();
-            if (var2.rank != null) {
-                var7.add(var2.rank);
-                var8.add(-1);
-            }
-
-            if (var2.regDate != null) {
-                var7.add("рег. " + var2.regDate);
-                var8.add(-6642248);
-            }
-
-            if (var2.level != null) {
-                var7.add("ур. " + var2.level);
-                var8.add(-8460383);
-            }
-
-            Extra.extra(var2, var7, var8);
-            if (var2.coverage != null) {
-                if (var2.coverage.hidden()) {
-                    var7.add("инв. скрыт");
-                    var8.add(-38037);
-                } else if (var2.coverage.full()) {
-                    var7.add("инв. открыт");
-                    var8.add(-8460383);
-                }
-            }
-
-            if (!var7.isEmpty()) {
-                int var9 = var3 + var0.textWidth(var2.player) + 10;
-                int var10 = var3 + var5;
-                String var11 = "  ·  ";
-
-                for (int var12 = 0; var12 < var7.size(); var12++) {
-                    String var13 = (String)var7.get(var12);
-                    int var14 = var0.textWidth(var13);
-                    if (var12 > 0) {
-                        int var15 = var0.textWidth(var11);
-                        if (var9 + var15 + var14 > var10) {
-                            return;
-                        }
-
-                        var0.text(var1, var11, var9, var4, -10722187);
-                        var9 += var15;
-                    } else if (var9 + var14 > var10) {
-                        return;
-                    }
-
-                    var0.text(var1, var13, var9, var4, (Integer)var8.get(var12));
-                    var9 += var14;
-                }
-            }
-        }
-    }
-
-    private static String tabLevel(String var0) {
-        if (var0 == null) {
-            return null;
-        }
-
-        long var1 = System.currentTimeMillis();
-        if (var1 - tabAt > 1000L) {
-            tabAt = var1;
-
-            try {
-                refreshTab();
-            } catch (Throwable var4) {
-            }
-        }
-
-        return TAB.get(var0);
-    }
-
-    private static void refreshTab() {
-        Minecraft var0 = Minecraft.getInstance();
-        ClientPacketListener var1 = var0 == null ? null : var0.getConnection();
-        if (var1 != null) {
-            Object var2 = null;
-
-            try {
-                Object var3 = var0.getClass().getField("level").get(var0);
-                if (var3 != null) {
-                    var2 = call(var3, "getScoreboard");
-                }
-            } catch (Throwable var14) {
-            }
-
-            HashMap var15 = new HashMap();
-
-            for (PlayerInfo var5 : var1.getOnlinePlayers()) {
-                String var6 = var5.getProfile().name();
-                StringBuilder var7 = new StringBuilder();
-
-                try {
-                    if (call(var5, "getTabListDisplayName") instanceof Component var9) {
-                        var7.append(var9.getString());
-                    }
-                } catch (Throwable var13) {
-                }
-
-                try {
-                    Object var16 = var2 == null ? null : call(var2, "getPlayersTeam", var6);
-                    if (var16 != null) {
-                        Object var18 = call(var16, "getPlayerPrefix");
-                        Object var10 = call(var16, "getPlayerSuffix");
-                        if (var18 instanceof Component var11) {
-                            var7.append(' ').append(var11.getString());
-                        }
-
-                        if (var10 instanceof Component var19) {
-                            var7.append(' ').append(var19.getString());
-                        }
-                    }
-                } catch (Throwable var12) {
-                }
-
-                Matcher var17 = TAB_LEVEL.matcher(clean(var7.toString()));
-                if (var17.find()) {
-                    var15.put(var6, var17.group(1));
-                }
-            }
-
-            TAB.clear();
-            TAB.putAll(var15);
-        }
-    }
-
-    private static Object call(Object var0, String var1, Object... var2) throws Exception {
-        for (Method var6 : var0.getClass().getMethods()) {
-            if (var6.getName().equals(var1) && var6.getParameterCount() == var2.length) {
-                return var6.invoke(var0, var2);
+                return prefix.isEmpty() ? null : cut(prefix, 24);
             }
         }
 
         return null;
     }
 
-    public static boolean isRateLimit(String var0) {
-        return var0 == null ? false : var0.toLowerCase(Locale.ROOT).replaceAll("\\s+", "").contains("подождитенемного");
+    private static String findRegDate(List<List<String>> items) {
+        // 1. Строка со словом "регистрация" и дата в ней или ниже
+        for (List<String> lines : items) {
+            for (int i = 0; i < lines.size(); i++) {
+                if (!REG.matcher(lines.get(i)).find()) {
+                    continue;
+                }
+
+                String date = find(DATE, lines.get(i));
+
+                for (int j = i + 1; date == null && j < lines.size(); j++) {
+                    date = find(DATE, lines.get(j));
+                }
+
+                if (date == null && i > 0) {
+                    date = find(DATE, lines.get(0));
+                }
+
+                if (date != null) {
+                    return date;
+                }
+            }
+        }
+
+        // 2. Предмет, похожий на часы/дату
+        for (List<String> lines : items) {
+            String title = lines.get(0).toLowerCase(Locale.ROOT);
+            if (title.contains("час") || title.contains("врем") || title.contains("clock") || title.contains("дата")) {
+                for (String line : lines) {
+                    String date = find(DATE, line);
+                    if (date != null) {
+                        return date;
+                    }
+                }
+            }
+        }
+
+        // 3. Любая дата
+        for (List<String> lines : items) {
+            for (String line : lines) {
+                String date = find(DATE, line);
+                if (date != null) {
+                    return date;
+                }
+            }
+        }
+
+        return null;
     }
 
-    public static boolean allowRetry(String var0) {
-        int var1 = RETRIES.merge(var0, 1, Integer::sum);
-        return var1 <= 8;
+    private static String findLevel(List<List<String>> items) {
+        for (List<String> lines : items) {
+            for (String line : lines) {
+                if (line.toLowerCase(Locale.ROOT).contains("редкост")) {
+                    continue;
+                }
+
+                Matcher m = LEVEL.matcher(line);
+                if (m.find()) {
+                    return m.group(2);
+                }
+            }
+        }
+
+        return null;
     }
 
-    static void clearRetries(String var0) {
-        RETRIES.remove(var0);
+    private static String findRank(List<List<String>> items) {
+        for (List<String> lines : items) {
+            for (int i = 0; i < lines.size(); i++) {
+                String line = lines.get(i);
+                if (line.toLowerCase(Locale.ROOT).contains("редкост")) {
+                    continue;
+                }
+
+                Matcher m = RANK.matcher(line);
+                if (!m.find()) {
+                    continue;
+                }
+
+                String value = LEAD.matcher(line.substring(m.end())).replaceFirst("").trim();
+                if (value.isEmpty() && i + 1 < lines.size()) {
+                    value = lines.get(i + 1);
+                }
+
+                if (!value.isEmpty()) {
+                    return cut(value, 24);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static String find(Pattern pattern, String text) {
+        if (text == null) {
+            return null;
+        }
+
+        Matcher m = pattern.matcher(text);
+        return m.find() ? m.group().trim() : null;
+    }
+
+    private static void dump(MenuScanner.Result result, List<DiamondMenus.Cell> cells) {
+        if (dumped) {
+            return;
+        }
+
+        dumped = true;
+
+        try {
+            Path dir = Path.of("config", "diamond-finder");
+            Files.createDirectories(dir);
+            StringBuilder text = new StringBuilder("player: ").append(result.player).append('\n');
+            text.append("tab-level: ").append(TAB.get(result.player)).append('\n');
+
+            for (DiamondMenus.Cell cell : cells) {
+                text.append("slot ").append(cell.slot()).append(": ").append(esc(cell.name())).append('\n');
+                if (cell.lore() != null) {
+                    for (String line : cell.lore()) {
+                        text.append("    ").append(esc(line)).append('\n');
+                    }
+                }
+            }
+
+            Files.writeString(dir.resolve("profile-dump.txt"), text.toString());
+        } catch (Throwable ignored) {
+        }
+    }
+
+    public static void noteMatch(String key, String name, List<String> lore) {
+        if (key == null) {
+            return;
+        }
+
+        try {
+            String effect = null;
+            if (lore != null) {
+                for (int i = 0; i < lore.size() && effect == null; i++) {
+                    String line = clean(lore.get(i));
+                    Matcher m = EFFECT.matcher(line);
+                    if (m.find()) {
+                        String value = LEAD.matcher(m.group(1)).replaceFirst("").trim();
+                        if (value.isEmpty() && i + 1 < lore.size()) {
+                            value = clean(lore.get(i + 1));
+                        }
+
+                        effect = value.isEmpty() ? cut(line, 28) : cut(value, 28);
+                    }
+                }
+            }
+
+            if (effect != null) {
+                EFFECTS.put(key, effect);
+            }
+
+            if (itemDumps < 6 || effect != null && effectDumps < 4) {
+                itemDumps++;
+                if (effect != null) {
+                    effectDumps++;
+                }
+
+                StringBuilder text = new StringBuilder("item: ")
+                    .append(esc(name))
+                    .append("  =>  key=")
+                    .append(key)
+                    .append("  effect=")
+                    .append(effect)
+                    .append('\n');
+                if (lore != null) {
+                    for (String line : lore) {
+                        text.append("    ").append(esc(line)).append('\n');
+                    }
+                }
+
+                Path dir = Path.of("config", "diamond-finder");
+                Files.createDirectories(dir);
+                Files.writeString(dir.resolve("item-dump.txt"), text.toString(), StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    public static Map<String, String> takeEffects(String player) {
+        Map<String, String> effects = new HashMap<>();
+        if (player != null && player.equals(effectPlayer)) {
+            effects.putAll(EFFECTS);
+        }
+
+        EFFECTS.clear();
+        return effects;
+    }
+
+    public static void draw(FinderScreen screen, GuiGraphicsExtractor g, MenuScanner.Result result, int x, int y, int width) {
+        if (result == null) {
+            return;
+        }
+
+        String level = tabLevel(result.player);
+        if (level != null) {
+            result.level = level;
+        }
+
+        List<String> parts = new ArrayList<>();
+        List<Integer> colors = new ArrayList<>();
+        if (result.rank != null) {
+            parts.add(result.rank);
+            colors.add(RANK_COLOR);
+        }
+
+        if (result.regDate != null) {
+            parts.add("рег. " + result.regDate);
+            colors.add(REG_COLOR);
+        }
+
+        if (result.level != null) {
+            parts.add("ур. " + result.level);
+            colors.add(GOOD_COLOR);
+        }
+
+        Extra.extra(result, parts, colors);
+        if (result.coverage != null) {
+            if (result.coverage.hidden()) {
+                parts.add("инв. скрыт");
+                colors.add(BAD_COLOR);
+            } else if (result.coverage.full()) {
+                parts.add("инв. открыт");
+                colors.add(GOOD_COLOR);
+            }
+        }
+
+        if (parts.isEmpty()) {
+            return;
+        }
+
+        int cursor = x + screen.textWidth(result.player) + 10;
+        int right = x + width;
+        String separator = "  ·  ";
+
+        for (int i = 0; i < parts.size(); i++) {
+            String part = parts.get(i);
+            int partW = screen.textWidth(part);
+            if (i > 0) {
+                int sepW = screen.textWidth(separator);
+                if (cursor + sepW + partW > right) {
+                    return;
+                }
+
+                screen.text(g, separator, cursor, y, SEPARATOR_COLOR);
+                cursor += sepW;
+            } else if (cursor + partW > right) {
+                return;
+            }
+
+            screen.text(g, part, cursor, y, colors.get(i));
+            cursor += partW;
+        }
+    }
+
+    private static String tabLevel(String player) {
+        if (player == null) {
+            return null;
+        }
+
+        long now = System.currentTimeMillis();
+        if (now - tabAt > 1000L) {
+            tabAt = now;
+
+            try {
+                refreshTab();
+            } catch (Throwable ignored) {
+            }
+        }
+
+        return TAB.get(player);
+    }
+
+    private static void refreshTab() {
+        Minecraft mc = Minecraft.getInstance();
+        ClientPacketListener connection = mc == null ? null : mc.getConnection();
+        if (connection == null) {
+            return;
+        }
+
+        Object scoreboard = null;
+
+        try {
+            Object level = mc.getClass().getField("level").get(mc);
+            if (level != null) {
+                scoreboard = call(level, "getScoreboard");
+            }
+        } catch (Throwable ignored) {
+        }
+
+        Map<String, String> levels = new HashMap<>();
+
+        for (PlayerInfo info : connection.getOnlinePlayers()) {
+            String nick = info.getProfile().name();
+            StringBuilder text = new StringBuilder();
+
+            try {
+                if (call(info, "getTabListDisplayName") instanceof Component display) {
+                    text.append(display.getString());
+                }
+            } catch (Throwable ignored) {
+            }
+
+            try {
+                Object team = scoreboard == null ? null : call(scoreboard, "getPlayersTeam", nick);
+                if (team != null) {
+                    if (call(team, "getPlayerPrefix") instanceof Component prefix) {
+                        text.append(' ').append(prefix.getString());
+                    }
+
+                    if (call(team, "getPlayerSuffix") instanceof Component suffix) {
+                        text.append(' ').append(suffix.getString());
+                    }
+                }
+            } catch (Throwable ignored) {
+            }
+
+            Matcher m = TAB_LEVEL.matcher(clean(text.toString()));
+            if (m.find()) {
+                levels.put(nick, m.group(1));
+            }
+        }
+
+        TAB.clear();
+        TAB.putAll(levels);
+    }
+
+    private static Object call(Object target, String name, Object... args) throws Exception {
+        for (Method method : target.getClass().getMethods()) {
+            if (method.getName().equals(name) && method.getParameterCount() == args.length) {
+                return method.invoke(target, args);
+            }
+        }
+
+        return null;
+    }
+
+    public static boolean isRateLimit(String message) {
+        return message != null && message.toLowerCase(Locale.ROOT).replaceAll("\\s+", "").contains("подождитенемного");
+    }
+
+    public static boolean allowRetry(String player) {
+        int attempts = RETRIES.merge(player, 1, Integer::sum);
+        return attempts <= MAX_RETRIES;
+    }
+
+    static void clearRetries(String player) {
+        RETRIES.remove(player);
     }
 }

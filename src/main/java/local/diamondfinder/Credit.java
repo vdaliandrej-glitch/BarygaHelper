@@ -3,32 +3,32 @@ package local.diamondfinder;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 
 public final class Credit {
-    private static final int FROM = 6412196;
-    private static final int TO = 6818731;
+    private static final int FROM = 0x61D7A4;
+    private static final int TO = 0x680BAB;
 
     private Credit() {
     }
 
-    public static void draw(FinderScreen var0, GuiGraphicsExtractor var1, String var2, int var3, int var4, int var5) {
-        long var6 = System.currentTimeMillis();
-        int var8 = var2.length();
+    public static void draw(FinderScreen screen, GuiGraphicsExtractor g, String text, int x, int y, int width) {
+        long now = System.currentTimeMillis();
+        int length = text.length();
 
-        for (int var9 = 0; var9 < var8; var9++) {
-            char var10 = var2.charAt(var9);
-            if (var10 != ' ') {
-                int var11 = var3 + var0.textWidth(var2.substring(0, var9));
-                double var12 = Math.sin(var6 / 300.0 - var9 * 0.5);
-                int var14 = var12 > 0.85 ? -1 : 0;
-                double var15 = 0.5 + 0.5 * Math.sin(var6 / 700.0 - var9 * 0.28);
-                var0.text(var1, String.valueOf(var10), var11, var4 + var14, mix(6412196, 6818731, (float)var15));
+        for (int i = 0; i < length; i++) {
+            char c = text.charAt(i);
+            if (c != ' ') {
+                int charX = x + screen.textWidth(text.substring(0, i));
+                double wave = Math.sin(now / 300.0 - i * 0.5);
+                int bounce = wave > 0.85 ? -1 : 0;
+                double blend = 0.5 + 0.5 * Math.sin(now / 700.0 - i * 0.28);
+                screen.text(g, String.valueOf(c), charX, y + bounce, mix(FROM, TO, (float) blend));
             }
         }
     }
 
-    private static int mix(int var0, int var1, float var2) {
-        int var3 = (int)((var0 >> 16 & 0xFF) * (1.0F - var2) + (var1 >> 16 & 0xFF) * var2 + 0.5F);
-        int var4 = (int)((var0 >> 8 & 0xFF) * (1.0F - var2) + (var1 >> 8 & 0xFF) * var2 + 0.5F);
-        int var5 = (int)((var0 & 0xFF) * (1.0F - var2) + (var1 & 0xFF) * var2 + 0.5F);
-        return 0xFF000000 | var3 << 16 | var4 << 8 | var5;
+    private static int mix(int from, int to, float t) {
+        int r = (int) ((from >> 16 & 0xFF) * (1.0F - t) + (to >> 16 & 0xFF) * t + 0.5F);
+        int g = (int) ((from >> 8 & 0xFF) * (1.0F - t) + (to >> 8 & 0xFF) * t + 0.5F);
+        int b = (int) ((from & 0xFF) * (1.0F - t) + (to & 0xFF) * t + 0.5F);
+        return 0xFF000000 | r << 16 | g << 8 | b;
     }
 }

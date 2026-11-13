@@ -14,14 +14,19 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.world.item.ItemStack;
 
 public final class DbTab2 {
-    private static final int TEXT = -1379332;
-    private static final int MUTED = -8152657;
-    private static final int CYAN = -14363163;
-    private static final int ROW = -15589846;
-    private static final int ROW_HOVER = -14996933;
-    private static final int ROW_SELECTED = -14009008;
+    private static final int TEXT = 0xFFEAF3FC;
+    private static final int MUTED = 0xFF8399AF;
+    private static final int CYAN = 0xFF24D5E5;
+    private static final int ROW = 0xFF121E2A;
+    private static final int ROW_HOVER = 0xFF1B2A3B;
+    private static final int ROW_SELECTED = 0xFF2A3D50;
     private static final String[] SORTS = new String[]{"Совпадения", "Редкость", "Косметика", "Уровень", "Дата рег.", "Ник"};
     private static final int NICK_SORT = 5;
+    private static final int COSMETIC_ROW = 24;
+    private static final int PLAYER_ROW = 40;
+    private static final int BLOCKED_ROW = 26;
+    private static final Pattern DMY = Pattern.compile("(\\d{1,2})[./-](\\d{1,2})[./-](\\d{2,4})");
+    private static final Pattern YMD = Pattern.compile("(\\d{4})[./-](\\d{1,2})[./-](\\d{1,2})");
     private static final CosmeticText.Rarity[] RANKS = new CosmeticText.Rarity[]{
         CosmeticText.Rarity.COMMON, CosmeticText.Rarity.RARE, CosmeticText.Rarity.EPIC, CosmeticText.Rarity.LEGENDARY, CosmeticText.Rarity.MYTHIC
     };
@@ -34,436 +39,440 @@ public final class DbTab2 {
     private DbTab2() {
     }
 
-    private static int level(MenuScanner.Result var0) {
+    private static int level(MenuScanner.Result result) {
         try {
-            return var0.level == null ? -1 : Integer.parseInt(var0.level.trim());
-        } catch (Exception var2) {
+            return result.level == null ? -1 : Integer.parseInt(result.level.trim());
+        } catch (Exception e) {
             return -1;
         }
     }
 
-    private static long dateKey(String var0) {
-        if (var0 == null) {
+    private static long dateKey(String date) {
+        if (date == null) {
             return 0L;
         }
 
         try {
-            Matcher var1 = Pattern.compile("(\\d{1,2})[./-](\\d{1,2})[./-](\\d{2,4})").matcher(var0);
-            if (var1.find()) {
-                int var4 = Integer.parseInt(var1.group(3));
-                if (var4 < 100) {
-                    var4 += 2000;
+            Matcher dmy = DMY.matcher(date);
+            if (dmy.find()) {
+                int year = Integer.parseInt(dmy.group(3));
+                if (year < 100) {
+                    year += 2000;
                 }
 
-                return var4 * 10000L + Integer.parseInt(var1.group(2)) * 100L + Integer.parseInt(var1.group(1));
+                return year * 10000L + Integer.parseInt(dmy.group(2)) * 100L + Integer.parseInt(dmy.group(1));
             }
 
-            Matcher var2 = Pattern.compile("(\\d{4})[./-](\\d{1,2})[./-](\\d{1,2})").matcher(var0);
-            if (var2.find()) {
-                return Integer.parseInt(var2.group(1)) * 10000L + Integer.parseInt(var2.group(2)) * 100L + Integer.parseInt(var2.group(3));
+            Matcher ymd = YMD.matcher(date);
+            if (ymd.find()) {
+                return Integer.parseInt(ymd.group(1)) * 10000L + Integer.parseInt(ymd.group(2)) * 100L + Integer.parseInt(ymd.group(3));
             }
-        } catch (Exception var3) {
+        } catch (Exception ignored) {
         }
 
         return 0L;
     }
 
-    private static int[] counts(MenuScanner.Result var0, Catalog var1) {
-        if (var1.entries.size() != cacheCatalogSize || CACHE.size() > 4000) {
+    /** Количество косметики по редкостям: [обычная, редкая, эпическая, легендарная, мифическая, всего]. */
+    private static int[] counts(MenuScanner.Result result, Catalog catalog) {
+        if (catalog.entries.size() != cacheCatalogSize || CACHE.size() > 4000) {
             CACHE.clear();
-            cacheCatalogSize = var1.entries.size();
+            cacheCatalogSize = catalog.entries.size();
         }
 
-        int var2 = var0.owned == null ? 0 : var0.owned.size();
-        int[] var3 = CACHE.get(var0);
-        if (var3 != null && var3[5] == var2) {
-            return var3;
+        int owned = result.owned == null ? 0 : result.owned.size();
+        int[] counts = CACHE.get(result);
+        if (counts != null && counts[5] == owned) {
+            return counts;
         }
 
-        var3 = new int[6];
-        var3[5] = var2;
-        if (var0.owned != null) {
-            for (Object var5 : var0.owned) {
-                Catalog.Entry var6 = var1.entries.get(var5);
-                if (var6 != null) {
-                    CosmeticText.Rarity var7 = var6.rarityValue();
-                    if (var7 != null) {
-                        if (var7 == CosmeticText.Rarity.COMMON) {
-                            var3[0]++;
-                        } else if (var7 == CosmeticText.Rarity.RARE) {
-                            var3[1]++;
-                        } else if (var7 == CosmeticText.Rarity.EPIC) {
-                            var3[2]++;
-                        } else if (var7 == CosmeticText.Rarity.LEGENDARY) {
-                            var3[3]++;
-                        } else if (var7 == CosmeticText.Rarity.MYTHIC) {
-                            var3[4]++;
-                        }
-                    }
+        counts = new int[6];
+        counts[5] = owned;
+        if (result.owned != null) {
+            for (Object key : result.owned) {
+                Catalog.Entry entry = catalog.entries.get(key);
+                if (entry == null) {
+                    continue;
+                }
+
+                CosmeticText.Rarity rarity = entry.rarityValue();
+                if (rarity == CosmeticText.Rarity.COMMON) {
+                    counts[0]++;
+                } else if (rarity == CosmeticText.Rarity.RARE) {
+                    counts[1]++;
+                } else if (rarity == CosmeticText.Rarity.EPIC) {
+                    counts[2]++;
+                } else if (rarity == CosmeticText.Rarity.LEGENDARY) {
+                    counts[3]++;
+                } else if (rarity == CosmeticText.Rarity.MYTHIC) {
+                    counts[4]++;
                 }
             }
         }
 
-        CACHE.put(var0, var3);
-        return var3;
+        CACHE.put(result, counts);
+        return counts;
     }
 
-    private static int compareRarity(MenuScanner.Result var0, MenuScanner.Result var1, Catalog var2) {
-        int[] var3 = counts(var0, var2);
-        int[] var4 = counts(var1, var2);
+    private static int compareRarity(MenuScanner.Result a, MenuScanner.Result b, Catalog catalog) {
+        int[] countsA = counts(a, catalog);
+        int[] countsB = counts(b, catalog);
 
-        for (int var5 = 4; var5 >= 0; var5--) {
-            if (var3[var5] != var4[var5]) {
-                return Integer.compare(var3[var5], var4[var5]);
+        for (int i = 4; i >= 0; i--) {
+            if (countsA[i] != countsB[i]) {
+                return Integer.compare(countsA[i], countsB[i]);
             }
         }
 
         return 0;
     }
 
-    private static CosmeticText.Rarity top(MenuScanner.Result var0, Catalog var1) {
-        int[] var2 = counts(var0, var1);
+    private static CosmeticText.Rarity top(MenuScanner.Result result, Catalog catalog) {
+        int[] counts = counts(result, catalog);
 
-        for (int var3 = 4; var3 >= 0; var3--) {
-            if (var2[var3] > 0) {
-                return RANKS[var3];
+        for (int i = 4; i >= 0; i--) {
+            if (counts[i] > 0) {
+                return RANKS[i];
             }
         }
 
         return null;
     }
 
-    private static int mix(int var0, int var1, float var2) {
-        int var3 = var0 >> 16 & 0xFF;
-        int var4 = var0 >> 8 & 0xFF;
-        int var5 = var0 & 0xFF;
-        int var6 = var1 >> 16 & 0xFF;
-        int var7 = var1 >> 8 & 0xFF;
-        int var8 = var1 & 0xFF;
-        int var9 = (int)(var3 + (var6 - var3) * var2);
-        int var10 = (int)(var4 + (var7 - var4) * var2);
-        int var11 = (int)(var5 + (var8 - var5) * var2);
-        return 0xFF000000 | var9 << 16 | var10 << 8 | var11;
+    private static int mix(int from, int to, float t) {
+        int r1 = from >> 16 & 0xFF;
+        int g1 = from >> 8 & 0xFF;
+        int b1 = from & 0xFF;
+        int r2 = to >> 16 & 0xFF;
+        int g2 = to >> 8 & 0xFF;
+        int b2 = to & 0xFF;
+        int r = (int) (r1 + (r2 - r1) * t);
+        int g = (int) (g1 + (g2 - g1) * t);
+        int b = (int) (b1 + (b2 - b1) * t);
+        return 0xFF000000 | r << 16 | g << 8 | b;
     }
 
-    private static List<String> effectExtras(MenuScanner.Result var0, Set<String> var1) {
-        ArrayList var2 = new ArrayList();
-        if (ProfileDb.effectMode() == 1 && var0.owned != null && var0.effects != null && !var0.effects.isEmpty()) {
-            for (String var4 : var1) {
-                if (var0.owned.contains(var4) && var0.effects.containsKey(var4) && (var0.found == null || !var0.found.contains(var4))) {
-                    var2.add(var4);
+    private static List<String> effectExtras(MenuScanner.Result result, Set<String> foundKeys) {
+        List<String> extras = new ArrayList<>();
+        if (ProfileDb.effectMode() == 1 && result.owned != null && result.effects != null && !result.effects.isEmpty()) {
+            for (String key : foundKeys) {
+                if (result.owned.contains(key) && result.effects.containsKey(key) && (result.found == null || !result.found.contains(key))) {
+                    extras.add(key);
                 }
             }
-
-            return var2;
-        } else {
-            return var2;
         }
+
+        return extras;
     }
 
-    private static int matches(MenuScanner.Result var0, Set<String> var1) {
-        return var0.found.size() + effectExtras(var0, var1).size();
+    private static int matches(MenuScanner.Result result, Set<String> foundKeys) {
+        return result.found.size() + effectExtras(result, foundKeys).size();
     }
 
     private static String nickQuery() {
         return DbTab.nickBox == null ? "" : DbTab.nickBox.getValue();
     }
 
-    private static List<MenuScanner.Result> players(Catalog var0) {
-        ArrayList<MenuScanner.Result> var1 = new ArrayList<>();
-        Set<String> var2 = var0.selected;
-        HashSet<String> var3 = new HashSet<>(ProfileDb.foundKeys());
-        boolean var4 = ProfileDb.effectMode() == 1;
-        String var5 = nickQuery().trim().toLowerCase(Locale.ROOT);
+    private static List<MenuScanner.Result> players(Catalog catalog) {
+        List<MenuScanner.Result> players = new ArrayList<>();
+        Set<String> selected = catalog.selected;
+        Set<String> foundKeys = new HashSet<>(ProfileDb.foundKeys());
+        boolean effectsOnly = ProfileDb.effectMode() == 1;
+        String query = nickQuery().trim().toLowerCase(Locale.ROOT);
 
-        for (MenuScanner.Result var7 : DiamondFinder.scanner.results) {
-            if (var7.complete
-                && !Blacklist.isBlocked(var7.player)
-                && (
-                    var5.isEmpty()
-                        || var7.player.toLowerCase(Locale.ROOT).contains(var5)
-                        || var7.rank != null && var7.rank.toLowerCase(Locale.ROOT).contains(var5)
-                )
-                && (!var2.isEmpty() ? !var7.found.isEmpty() || !effectExtras(var7, var3).isEmpty() : !var4 || var7.effects != null && !var7.effects.isEmpty())) {
-                var1.add(var7);
+        for (MenuScanner.Result result : DiamondFinder.scanner.results) {
+            if (!result.complete || Blacklist.isBlocked(result.player)) {
+                continue;
+            }
+
+            boolean nameMatches = query.isEmpty()
+                || result.player.toLowerCase(Locale.ROOT).contains(query)
+                || result.rank != null && result.rank.toLowerCase(Locale.ROOT).contains(query);
+            if (!nameMatches) {
+                continue;
+            }
+
+            boolean cosmeticMatches = !selected.isEmpty()
+                ? !result.found.isEmpty() || !effectExtras(result, foundKeys).isEmpty()
+                : !effectsOnly || result.effects != null && !result.effects.isEmpty();
+            if (cosmeticMatches) {
+                players.add(result);
             }
         }
-        Comparator<MenuScanner.Result> var8 = switch (sortMode) {
-            case 1 -> (MenuScanner.Result var1x, MenuScanner.Result var2x) -> compareRarity(var1x, var2x, var0);
-            case 2 -> Comparator.comparingInt((MenuScanner.Result var0x) -> var0x.owned == null ? 0 : var0x.owned.size());
+
+        Comparator<MenuScanner.Result> order = switch (sortMode) {
+            case 1 -> (MenuScanner.Result a, MenuScanner.Result b) -> compareRarity(a, b, catalog);
+            case 2 -> Comparator.comparingInt((MenuScanner.Result r) -> r.owned == null ? 0 : r.owned.size());
             case 3 -> Comparator.comparingInt(DbTab2::level);
-            case 4 -> Comparator.comparingLong((MenuScanner.Result var0x) -> dateKey(var0x.regDate));
-            case 5 -> (MenuScanner.Result var0x, MenuScanner.Result var1x) -> var0x.player.compareToIgnoreCase(var1x.player);
-            default -> Comparator.comparingInt((MenuScanner.Result var1x) -> matches(var1x, var3));
+            case 4 -> Comparator.comparingLong((MenuScanner.Result r) -> dateKey(r.regDate));
+            case NICK_SORT -> (MenuScanner.Result a, MenuScanner.Result b) -> a.player.compareToIgnoreCase(b.player);
+            default -> Comparator.comparingInt((MenuScanner.Result r) -> matches(r, foundKeys));
         };
         if (sortDesc) {
-            var8 = var8.reversed();
+            order = order.reversed();
         }
 
-        var1.sort(var8.thenComparing((MenuScanner.Result var0x, MenuScanner.Result var1x) -> var0x.player.compareToIgnoreCase(var1x.player)));
-        return var1;
+        players.sort(order.thenComparing((MenuScanner.Result a, MenuScanner.Result b) -> a.player.compareToIgnoreCase(b.player)));
+        return players;
     }
 
-    private static void pager(FinderScreen var0, GuiGraphicsExtractor var1, int var2, int var3, int var4, int var5, Runnable var6, Runnable var7) {
-        String var8 = var4 + 1 + " / " + var5;
-        Ui.btn(var0, var1, "<", var2, var3, 24, 22, false, var4 > 0 ? var6 : () -> {});
-        var0.text(var1, var8, var2 + 32, var3 + 7, -8152657);
-        Ui.btn(var0, var1, ">", var2 + 40 + var0.textWidth(var8), var3, 24, 22, false, var4 < var5 - 1 ? var7 : () -> {});
+    private static void pager(FinderScreen screen, GuiGraphicsExtractor g, int x, int y, int page, int pages, Runnable prev, Runnable next) {
+        String text = page + 1 + " / " + pages;
+        Ui.btn(screen, g, "<", x, y, 24, 22, false, page > 0 ? prev : () -> {});
+        screen.text(g, text, x + 32, y + 7, MUTED);
+        Ui.btn(screen, g, ">", x + 40 + screen.textWidth(text), y, 24, 22, false, page < pages - 1 ? next : () -> {});
     }
 
-    public static void draw(FinderScreen var0, GuiGraphicsExtractor var1) {
-        Catalog var2 = DiamondFinder.catalog;
-        int var3 = var0.left + var0.sidebar + 10;
-        int var4 = var0.left + var0.panelW - 10;
-        int var5 = var0.top + 52;
-        int var6 = var0.top + 84;
-        int var7 = var0.top + 112;
-        int var8 = var0.top + var0.panelH - 74;
-        int var9 = var0.top + var0.panelH - 68;
-        int var10 = Math.max(170, (var4 - var3) * 40 / 100);
-        int var11 = var3 + var10 + 12;
-        int var12 = var4 - var11;
-        byte var13 = 24;
-        byte var14 = 40;
-        Ui.field(var0, var1, var3, var5, var10, var0.search, "cos");
-        Ui.field(var0, var1, var11, var5, var12, DbTab.nickBox, "nick");
-        List var15 = var0.filtered();
-        int var16 = Math.max(1, (var8 - var7) / var13);
-        int var17 = Math.max(1, (var15.size() + var16 - 1) / var16);
-        var0.page = Math.max(0, Math.min(var0.page, var17 - 1));
-        var0.text(var1, "Косметика  ·  выбрано " + var2.selected.size(), var3, var6 + 7, -1379332);
-        if (var15.isEmpty()) {
-            var0.text(
-                var1, var2.entries.isEmpty() ? "Каталог пока пуст — откройте список косметики на сервере" : "Ничего не найдено", var3 + 4, var7 + 6, -8152657
+    public static void draw(FinderScreen screen, GuiGraphicsExtractor g) {
+        Catalog catalog = DiamondFinder.catalog;
+        int left = screen.left + screen.sidebar + 10;
+        int right = screen.left + screen.panelW - 10;
+        int searchY = screen.top + 52;
+        int headerY = screen.top + 84;
+        int listTop = screen.top + 112;
+        int listBottom = screen.top + screen.panelH - 74;
+        int pagerY = screen.top + screen.panelH - 68;
+        int cosmeticW = Math.max(170, (right - left) * 40 / 100);
+        int playersX = left + cosmeticW + 12;
+        int playersW = right - playersX;
+        Ui.field(screen, g, left, searchY, cosmeticW, screen.search, "cos");
+        Ui.field(screen, g, playersX, searchY, playersW, DbTab.nickBox, "nick");
+
+        // Левая колонка: косметика из каталога
+        List<Catalog.Entry> cosmetics = screen.filtered();
+        int perPage = Math.max(1, (listBottom - listTop) / COSMETIC_ROW);
+        int pages = Math.max(1, (cosmetics.size() + perPage - 1) / perPage);
+        screen.page = Math.max(0, Math.min(screen.page, pages - 1));
+        screen.text(g, "Косметика  ·  выбрано " + catalog.selected.size(), left, headerY + 7, TEXT);
+        if (cosmetics.isEmpty()) {
+            screen.text(
+                g, catalog.entries.isEmpty() ? "Каталог пока пуст — откройте список косметики на сервере" : "Ничего не найдено", left + 4, listTop + 6, MUTED
             );
         }
 
-        for (int var18 = 0; var18 < var16; var18++) {
-            int var19 = var0.page * var16 + var18;
-            if (var19 >= var15.size()) {
+        for (int row = 0; row < perPage; row++) {
+            int index = screen.page * perPage + row;
+            if (index >= cosmetics.size()) {
                 break;
             }
 
-            Catalog.Entry var20 = (Catalog.Entry)var15.get(var19);
-            int var21 = var7 + var18 * var13;
-            boolean var22 = var2.selected.contains(var20.key);
-            byte var23 = 50;
-            boolean var24 = var0.inside(var3, var21, var10 - var23 - 4, var13 - 2);
-            var1.fill(var3, var21, var3 + var10, var21 + var13 - 2, var22 ? -14009008 : (var24 ? -14996933 : -15589846));
-            CosmeticText.Rarity var25 = var20.rarityValue();
-            if (var25 != null) {
-                var1.fill(var3, var21, var3 + 3, var21 + var13 - 2, var25.color);
+            Catalog.Entry entry = cosmetics.get(index);
+            int y = listTop + row * COSMETIC_ROW;
+            boolean selected = catalog.selected.contains(entry.key);
+            int foundW = 50;
+            boolean hover = screen.inside(left, y, cosmeticW - foundW - 4, COSMETIC_ROW - 2);
+            g.fill(left, y, left + cosmeticW, y + COSMETIC_ROW - 2, selected ? ROW_SELECTED : (hover ? ROW_HOVER : ROW));
+            CosmeticText.Rarity rarity = entry.rarityValue();
+            if (rarity != null) {
+                g.fill(left, y, left + 3, y + COSMETIC_ROW - 2, rarity.color);
             }
 
-            if (var22) {
-                var1.fill(var3 + 3, var21 + var13 - 3, var3 + var10, var21 + var13 - 2, -14363163);
+            if (selected) {
+                g.fill(left + 3, y + COSMETIC_ROW - 3, left + cosmeticW, y + COSMETIC_ROW - 2, CYAN);
             }
 
-            ItemStack var26 = var20.stack;
-            if (var26 != null && !var26.isEmpty()) {
-                var1.item(var26, var3 + 8, var21 + 2);
+            ItemStack stack = entry.stack;
+            if (stack != null && !stack.isEmpty()) {
+                g.item(stack, left + 8, y + 2);
             }
 
-            var0.text(var1, var0.shorten(var20.name, var10 - var23 - 40), var3 + 30, var21 + 7, var22 ? -14363163 : -1379332);
-            String var27 = var20.key;
-            Ui.btn(var0, var1, "Нашёл", var3 + var10 - var23 - 2, var21 + 2, var23, var13 - 6, false, () -> ProfileDb.markFound(var27));
-            DbTab.area(var0, var3, var21, var10 - var23 - 4, var13 - 2, () -> DiamondFinder.catalog.toggle(var27));
+            screen.text(g, screen.shorten(entry.name, cosmeticW - foundW - 40), left + 30, y + 7, selected ? CYAN : TEXT);
+            String key = entry.key;
+            Ui.btn(screen, g, "Нашёл", left + cosmeticW - foundW - 2, y + 2, foundW, COSMETIC_ROW - 6, false, () -> ProfileDb.markFound(key));
+            DbTab.area(screen, left, y, cosmeticW - foundW - 4, COSMETIC_ROW - 2, () -> DiamondFinder.catalog.toggle(key));
         }
 
-        pager(var0, var1, var3, var9, var0.page, var17, () -> var0.page = Math.max(0, var0.page - 1), () -> var0.page = Math.min(var17 - 1, var0.page + 1));
-        List var47 = showBlocked ? new ArrayList() : players(var2);
-        int var48 = 0;
+        pager(screen, g, left, pagerY, screen.page, pages, () -> screen.page = Math.max(0, screen.page - 1), () -> screen.page = Math.min(pages - 1, screen.page + 1));
 
-        for (MenuScanner.Result var51 : DiamondFinder.scanner.results) {
-            if (var51.complete && !Blacklist.isBlocked(var51.player)) {
-                var48++;
+        // Правая колонка: игроки из базы
+        List<MenuScanner.Result> players = showBlocked ? new ArrayList<>() : players(catalog);
+        int inBase = 0;
+
+        for (MenuScanner.Result result : DiamondFinder.scanner.results) {
+            if (result.complete && !Blacklist.isBlocked(result.player)) {
+                inBase++;
             }
         }
 
-        float var50 = Math.min(1.0F, Math.max(0.72F, (var12 - 120.0F) / 272.0F));
-        int var52 = (int)(64.0F * var50);
-        int var53 = (int)(96.0F * var50);
-        int var54 = (int)(104.0F * var50);
-        int var55 = var4;
-        var55 -= var52;
-        Ui.btn(var0, var1, showBlocked ? "К базе" : "ЧС (" + Blacklist.size() + ")", var55, var6, var52, 22, showBlocked, () -> {
+        float scale = Math.min(1.0F, Math.max(0.72F, (playersW - 120.0F) / 272.0F));
+        int blockedW = (int) (64.0F * scale);
+        int orderW = (int) (96.0F * scale);
+        int sortW = (int) (104.0F * scale);
+        int buttonX = right - blockedW;
+        Ui.btn(screen, g, showBlocked ? "К базе" : "ЧС (" + Blacklist.size() + ")", buttonX, headerY, blockedW, 22, showBlocked, () -> {
             showBlocked = !showBlocked;
-            var0.resultsPage = 0;
+            screen.resultsPage = 0;
         });
         if (!showBlocked) {
-            int var57 = var55 - (6 + var53);
-            String var58 = sortMode == 5 ? (sortDesc ? "Я–А" : "А–Я") : (sortDesc ? "По убыванию" : "По возрастанию");
-            Ui.btn(var0, var1, var58, var57, var6, var53, 22, false, () -> {
+            int orderX = buttonX - (6 + orderW);
+            String orderLabel = sortMode == NICK_SORT ? (sortDesc ? "Я–А" : "А–Я") : (sortDesc ? "По убыванию" : "По возрастанию");
+            Ui.btn(screen, g, orderLabel, orderX, headerY, orderW, 22, false, () -> {
                 sortDesc = !sortDesc;
-                var0.resultsPage = 0;
+                screen.resultsPage = 0;
             });
-            var55 = var57 - (6 + var54);
-            Ui.btn(var0, var1, "Сорт: " + SORTS[sortMode], var55, var6, var54, 22, true, () -> {
+            buttonX = orderX - (6 + sortW);
+            Ui.btn(screen, g, "Сорт: " + SORTS[sortMode], buttonX, headerY, sortW, 22, true, () -> {
                 sortMode = (sortMode + 1) % SORTS.length;
-                sortDesc = sortMode != 5;
-                var0.resultsPage = 0;
+                sortDesc = sortMode != NICK_SORT;
+                screen.resultsPage = 0;
             });
         }
 
-        String var59;
+        String header;
         if (showBlocked) {
-            var59 = "Чёрный список: " + Blacklist.size();
+            header = "Чёрный список: " + Blacklist.size();
         } else {
-            var59 = var2.selected.isEmpty() ? "В базе: " + var48 : "Найдено " + var47.size() + " из " + var48;
+            header = catalog.selected.isEmpty() ? "В базе: " + inBase : "Найдено " + players.size() + " из " + inBase;
             if (!nickQuery().isBlank()) {
-                var59 = var59 + "  ·  по запросу";
+                header = header + "  ·  по запросу";
             }
         }
 
-        var0.text(var1, var0.shorten(var59, Math.max(40, var55 - var11 - 10)), var11, var6 + 7, -1379332);
+        screen.text(g, screen.shorten(header, Math.max(40, buttonX - playersX - 10)), playersX, headerY + 7, TEXT);
         if (showBlocked) {
-            drawBlocked(var0, var1, var11, var12, var7, var8, var9, var4);
-        } else {
-            int var60 = Math.max(1, (var8 - var7) / var14);
-            int var61 = Math.max(1, (var47.size() + var60 - 1) / var60);
-            var0.resultsPage = Math.max(0, Math.min(var0.resultsPage, var61 - 1));
-            if (var47.isEmpty()) {
-                String var28 = var48 == 0
-                    ? "База пуста — нажмите «Добавить в базу», чтобы просканировать игроков."
-                    : (var2.selected.isEmpty() ? "Никого не найдено." : "Игроков с такой косметикой в базе нет.");
-                var0.text(var1, var0.shorten(var28, var12 - 8), var11 + 4, var7 + 6, -8152657);
-            }
-
-            byte var62 = 40;
-            HashSet<String> var29 = new HashSet<>(ProfileDb.foundKeys());
-
-            for (int var30 = 0; var30 < var60; var30++) {
-                int var31 = var0.resultsPage * var60 + var30;
-                if (var31 >= var47.size()) {
-                    break;
-                }
-
-                MenuScanner.Result var32 = (MenuScanner.Result)var47.get(var31);
-                int var33 = var7 + var30 * var14;
-                boolean var34 = var0.inside(var11, var33, var12, var14 - 3);
-                CosmeticText.Rarity var35 = top(var32, var2);
-                int var36 = var34 ? -14996933 : -15589846;
-                if (var35 != null) {
-                    int var37 = var35.color;
-                    var1.fill(var11, var33, var11 + var12, var33 + var14 - 3, mix(var36, var37, var34 ? 0.3F : 0.2F));
-                    var1.fill(var11, var33 + var14 - 4, var11 + var12, var33 + var14 - 3, mix(var36, var37, 0.55F));
-                    var1.fill(var11, var33, var11 + (var34 ? 4 : 3), var33 + var14 - 3, var37);
-                } else {
-                    var1.fill(var11, var33, var11 + var12, var33 + var14 - 3, var36);
-                    if (var34) {
-                        var1.fill(var11, var33, var11 + 2, var33 + var14 - 3, -14363163);
-                    }
-                }
-
-                Extra.nameText(var0, var1, var0.shorten(var32.player, 130), var11 + 10, var33 + 6, -1379332);
-                ProfileInfo.draw(var0, var1, var32, var11 + 10, var33 + 6, var12 - 20 - var62 - 8);
-                int var63 = var2.selected.size();
-                String var38;
-                if (var63 == 0) {
-                    int[] var39 = counts(var32, var2);
-                    var38 = "Косметики в базе: " + var39[5];
-                    if (var35 != null) {
-                        var38 = var38 + "  ·  лучшая: " + var35.label + " ×" + var39[var35.ordinal()];
-                    }
-                } else {
-                    List<String> var64 = effectExtras(var32, var29);
-                    ArrayList<String> var40 = new ArrayList<>();
-                    if (ProfileDb.effectMode() != 1) {
-                        var40.addAll(var32.found);
-                    } else {
-                        for (String var42 : var32.found) {
-                            var40.add(var42);
-                        }
-
-                        var40.addAll(var64);
-                    }
-
-                    StringBuilder var66 = new StringBuilder(
-                        ProfileDb.effectMode() == 1 ? "С эффектом " + var40.size() + ": " : "Совпало " + var40.size() + " из " + var63 + ": "
-                    );
-                    int var67 = 0;
-
-                    for (String var44 : var40) {
-                        Catalog.Entry var45 = var2.entries.get(var44);
-                        if (var45 != null) {
-                            if (var67++ > 0) {
-                                var66.append(", ");
-                            }
-
-                            var66.append(var45.name);
-                            Object var46 = var32.effects == null ? null : var32.effects.get(var44);
-                            if (var46 != null) {
-                                var66.append(" (").append(var46).append(')');
-                            }
-
-                            if (var67 >= 3) {
-                                if (var40.size() > 3) {
-                                    var66.append(" …");
-                                }
-                                break;
-                            }
-                        }
-                    }
-
-                    var38 = var66.toString();
-                }
-
-                var0.text(var1, var0.shorten(var38, var12 - 20), var11 + 10, var33 + 21, -8152657);
-                String var65 = var32.player;
-                Ui.btn(var0, var1, "В ЧС", var11 + var12 - var62 - 6, var33 + 3, var62, 16, false, () -> Blacklist.add(var65));
-                DbTab.area(var0, var11, var33, var12 - var62 - 12, var14 - 3, () -> var0.detail = var32);
-            }
-
-            pager(
-                var0,
-                var1,
-                var11,
-                var9,
-                var0.resultsPage,
-                var61,
-                () -> var0.resultsPage = Math.max(0, var0.resultsPage - 1),
-                () -> var0.resultsPage = Math.min(var61 - 1, var0.resultsPage + 1)
-            );
-            if (var12 >= 260) {
-                DbClear.draw(var0, var1, var4 + 6, var9);
-            }
-        }
-    }
-
-    private static void drawBlocked(FinderScreen var0, GuiGraphicsExtractor var1, int var2, int var3, int var4, int var5, int var6, int var7) {
-        List var8 = Blacklist.list();
-        byte var9 = 26;
-        int var10 = Math.max(1, (var5 - var4) / var9);
-        int var11 = Math.max(1, (var8.size() + var10 - 1) / var10);
-        var0.resultsPage = Math.max(0, Math.min(var0.resultsPage, var11 - 1));
-        if (var8.isEmpty()) {
-            var0.text(var1, "Чёрный список пуст. Игроков можно добавить кнопкой «В ЧС» в списке базы.", var2 + 4, var4 + 6, -8152657);
+            drawBlocked(screen, g, playersX, playersW, listTop, listBottom, pagerY, right);
+            return;
         }
 
-        byte var12 = 64;
+        int playersPerPage = Math.max(1, (listBottom - listTop) / PLAYER_ROW);
+        int playerPages = Math.max(1, (players.size() + playersPerPage - 1) / playersPerPage);
+        screen.resultsPage = Math.max(0, Math.min(screen.resultsPage, playerPages - 1));
+        if (players.isEmpty()) {
+            String empty = inBase == 0
+                ? "База пуста — нажмите «Добавить в базу», чтобы просканировать игроков."
+                : (catalog.selected.isEmpty() ? "Никого не найдено." : "Игроков с такой косметикой в базе нет.");
+            screen.text(g, screen.shorten(empty, playersW - 8), playersX + 4, listTop + 6, MUTED);
+        }
 
-        for (int var13 = 0; var13 < var10; var13++) {
-            int var14 = var0.resultsPage * var10 + var13;
-            if (var14 >= var8.size()) {
+        int blockW = 40;
+        Set<String> foundKeys = new HashSet<>(ProfileDb.foundKeys());
+
+        for (int row = 0; row < playersPerPage; row++) {
+            int index = screen.resultsPage * playersPerPage + row;
+            if (index >= players.size()) {
                 break;
             }
 
-            String var15 = (String)var8.get(var14);
-            int var16 = var4 + var13 * var9;
-            var1.fill(var2, var16, var2 + var3, var16 + var9 - 3, -15589846);
-            var0.text(var1, var0.shorten(var15, var3 - var12 - 30), var2 + 10, var16 + 8, -1379332);
-            Ui.btn(var0, var1, "Убрать", var2 + var3 - var12 - 6, var16 + 2, var12, var9 - 7, false, () -> Blacklist.remove(var15));
+            MenuScanner.Result player = players.get(index);
+            int y = listTop + row * PLAYER_ROW;
+            boolean hover = screen.inside(playersX, y, playersW, PLAYER_ROW - 3);
+            CosmeticText.Rarity best = top(player, catalog);
+            int background = hover ? ROW_HOVER : ROW;
+            if (best != null) {
+                int color = best.color;
+                g.fill(playersX, y, playersX + playersW, y + PLAYER_ROW - 3, mix(background, color, hover ? 0.3F : 0.2F));
+                g.fill(playersX, y + PLAYER_ROW - 4, playersX + playersW, y + PLAYER_ROW - 3, mix(background, color, 0.55F));
+                g.fill(playersX, y, playersX + (hover ? 4 : 3), y + PLAYER_ROW - 3, color);
+            } else {
+                g.fill(playersX, y, playersX + playersW, y + PLAYER_ROW - 3, background);
+                if (hover) {
+                    g.fill(playersX, y, playersX + 2, y + PLAYER_ROW - 3, CYAN);
+                }
+            }
+
+            Extra.nameText(screen, g, screen.shorten(player.player, 130), playersX + 10, y + 6, TEXT);
+            ProfileInfo.draw(screen, g, player, playersX + 10, y + 6, playersW - 20 - blockW - 8);
+            int selectedCount = catalog.selected.size();
+            String summary;
+            if (selectedCount == 0) {
+                int[] counts = counts(player, catalog);
+                summary = "Косметики в базе: " + counts[5];
+                if (best != null) {
+                    summary = summary + "  ·  лучшая: " + best.label + " ×" + counts[best.ordinal()];
+                }
+            } else {
+                boolean effectsOnly = ProfileDb.effectMode() == 1;
+                List<String> matched = new ArrayList<>(player.found);
+                if (effectsOnly) {
+                    matched.addAll(effectExtras(player, foundKeys));
+                }
+
+                StringBuilder text = new StringBuilder(
+                    effectsOnly ? "С эффектом " + matched.size() + ": " : "Совпало " + matched.size() + " из " + selectedCount + ": "
+                );
+                int listed = 0;
+
+                for (String key : matched) {
+                    Catalog.Entry entry = catalog.entries.get(key);
+                    if (entry == null) {
+                        continue;
+                    }
+
+                    if (listed++ > 0) {
+                        text.append(", ");
+                    }
+
+                    text.append(entry.name);
+                    Object effect = player.effects == null ? null : player.effects.get(key);
+                    if (effect != null) {
+                        text.append(" (").append(effect).append(')');
+                    }
+
+                    if (listed >= 3) {
+                        if (matched.size() > 3) {
+                            text.append(" …");
+                        }
+                        break;
+                    }
+                }
+
+                summary = text.toString();
+            }
+
+            screen.text(g, screen.shorten(summary, playersW - 20), playersX + 10, y + 21, MUTED);
+            String nick = player.player;
+            Ui.btn(screen, g, "В ЧС", playersX + playersW - blockW - 6, y + 3, blockW, 16, false, () -> Blacklist.add(nick));
+            DbTab.area(screen, playersX, y, playersW - blockW - 12, PLAYER_ROW - 3, () -> screen.detail = player);
         }
 
         pager(
-            var0,
-            var1,
-            var2,
-            var6,
-            var0.resultsPage,
-            var11,
-            () -> var0.resultsPage = Math.max(0, var0.resultsPage - 1),
-            () -> var0.resultsPage = Math.min(var11 - 1, var0.resultsPage + 1)
+            screen,
+            g,
+            playersX,
+            pagerY,
+            screen.resultsPage,
+            playerPages,
+            () -> screen.resultsPage = Math.max(0, screen.resultsPage - 1),
+            () -> screen.resultsPage = Math.min(playerPages - 1, screen.resultsPage + 1)
+        );
+        if (playersW >= 260) {
+            DbClear.draw(screen, g, right + 6, pagerY);
+        }
+    }
+
+    private static void drawBlocked(FinderScreen screen, GuiGraphicsExtractor g, int x, int width, int listTop, int listBottom, int pagerY, int right) {
+        List<String> nicks = Blacklist.list();
+        int perPage = Math.max(1, (listBottom - listTop) / BLOCKED_ROW);
+        int pages = Math.max(1, (nicks.size() + perPage - 1) / perPage);
+        screen.resultsPage = Math.max(0, Math.min(screen.resultsPage, pages - 1));
+        if (nicks.isEmpty()) {
+            screen.text(g, "Чёрный список пуст. Игроков можно добавить кнопкой «В ЧС» в списке базы.", x + 4, listTop + 6, MUTED);
+        }
+
+        int removeW = 64;
+
+        for (int row = 0; row < perPage; row++) {
+            int index = screen.resultsPage * perPage + row;
+            if (index >= nicks.size()) {
+                break;
+            }
+
+            String nick = nicks.get(index);
+            int y = listTop + row * BLOCKED_ROW;
+            g.fill(x, y, x + width, y + BLOCKED_ROW - 3, ROW);
+            screen.text(g, screen.shorten(nick, width - removeW - 30), x + 10, y + 8, TEXT);
+            Ui.btn(screen, g, "Убрать", x + width - removeW - 6, y + 2, removeW, BLOCKED_ROW - 7, false, () -> Blacklist.remove(nick));
+        }
+
+        pager(
+            screen,
+            g,
+            x,
+            pagerY,
+            screen.resultsPage,
+            pages,
+            () -> screen.resultsPage = Math.max(0, screen.resultsPage - 1),
+            () -> screen.resultsPage = Math.min(pages - 1, screen.resultsPage + 1)
         );
     }
 }

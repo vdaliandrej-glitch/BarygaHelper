@@ -1,7 +1,6 @@
 package local.diamondfinder;
 
 import com.mojang.blaze3d.platform.InputConstants.Type;
-import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import java.time.Clock;
 import java.util.HashSet;
 import java.util.Locale;
@@ -11,14 +10,9 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallba
 import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents.ClientStopping;
-import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.EndTick;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
 import net.fabricmc.fabric.api.client.message.v1.ClientSendMessageEvents;
-import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents.Game;
-import net.fabricmc.fabric.api.client.message.v1.ClientSendMessageEvents.Chat;
-import net.fabricmc.fabric.api.client.message.v1.ClientSendMessageEvents.Command;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.KeyMapping;
@@ -32,6 +26,7 @@ import net.minecraft.resources.Identifier;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.Slot;
+import org.lwjgl.glfw.GLFW;
 import org.slf4j.LoggerFactory;
 
 public final class DiamondFinder implements ClientModInitializer {
@@ -54,27 +49,27 @@ public final class DiamondFinder implements ClientModInitializer {
         catalog = new Catalog();
         scanner = new MenuScanner(catalog);
         messageLog = new LocalMessageLog(
-            FabricLoader.getInstance().getConfigDir().resolve("ShintaroHelper.cfg"),
-            FabricLoader.getInstance().getGameDir().resolve("logs/ShintaroHelper/message"),
+            FabricLoader.getInstance().getConfigDir().resolve("BarygaHelper.cfg"),
+            FabricLoader.getInstance().getGameDir().resolve("logs/BarygaHelper/message"),
             Clock.systemDefaultZone(),
             text -> LoggerFactory.getLogger("BarygaHelper").warn(text)
         );
-        ClientSendMessageEvents.CHAT.register((Chat)text -> messageLog.record(text, false));
-        ClientSendMessageEvents.COMMAND.register((Command)text -> {
+        ClientSendMessageEvents.CHAT.register(text -> messageLog.record(text, false));
+        ClientSendMessageEvents.COMMAND.register(text -> {
             if (!automaticCommand) {
                 messageLog.record(text, true);
             }
         });
-        ClientLifecycleEvents.CLIENT_STOPPING.register((ClientStopping)mc -> messageLog.close());
-        ClientLifecycleEvents.CLIENT_STOPPING.register((ClientStopping)mc -> catalog.save());
-        ClientReceiveMessageEvents.GAME.register((Game)(text, overlay) -> {
+        ClientLifecycleEvents.CLIENT_STOPPING.register(mc -> messageLog.close());
+        ClientLifecycleEvents.CLIENT_STOPPING.register(mc -> catalog.save());
+        ClientReceiveMessageEvents.GAME.register((text, overlay) -> {
             if (!overlay) {
                 scanner.serverMessage(text.getString());
             }
         });
-        KeyMapping open = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.diamond_finder.open", Type.KEYSYM, 73, Category.MISC));
-        KeyMapping stop = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.diamond_finder.stop", Type.KEYSYM, 297, Category.MISC));
-        ClientTickEvents.END_CLIENT_TICK.register((EndTick)mc -> {
+        KeyMapping open = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.diamond_finder.open", Type.KEYSYM, GLFW.GLFW_KEY_I, Category.MISC));
+        KeyMapping stop = KeyMappingHelper.registerKeyMapping(new KeyMapping("key.diamond_finder.stop", Type.KEYSYM, GLFW.GLFW_KEY_F8, Category.MISC));
+        ClientTickEvents.END_CLIENT_TICK.register(mc -> {
             while (open.consumeClick()) {
                 if (mc.player != null && mc.gui.screen() == null) {
                     mc.gui.setScreen(new FinderScreen());
@@ -91,27 +86,26 @@ public final class DiamondFinder implements ClientModInitializer {
             importTick();
             scanner.tick();
         });
-        ClientCommandRegistrationCallback.EVENT
-            .register(
-                (ClientCommandRegistrationCallback)(dispatcher, access) -> dispatcher.register(
-                    (LiteralArgumentBuilder)((LiteralArgumentBuilder)ClientCommands.literal("df").executes(c -> {
-                        Minecraft.getInstance().execute(() -> Minecraft.getInstance().gui.setScreen(new FinderScreen()));
-                        return 1;
-                    })).then(ClientCommands.literal("stop").executes(c -> {
-                        stopAll();
-                        return 1;
-                    }))
-                )
-            );
+        ClientCommandRegistrationCallback.EVENT.register((dispatcher, access) -> dispatcher.register(
+            ClientCommands.literal("df")
+                .executes(c -> {
+                    Minecraft.getInstance().execute(() -> Minecraft.getInstance().gui.setScreen(new FinderScreen()));
+                    return 1;
+                })
+                .then(ClientCommands.literal("stop").executes(c -> {
+                    stopAll();
+                    return 1;
+                }))
+        ));
         HudElementRegistry.addLast(Identifier.fromNamespaceAndPath("diamond_finder", "progress"), (g, tick) -> {
             Minecraft mc = Minecraft.getInstance();
             if (scanner.running() && mc.gui.screen() == null) {
                 int x = Math.max(4, g.guiWidth() - 188);
                 int y = 7;
-                g.fill(x, y, x + 180, y + 32, -653256670);
-                g.fill(x, y, x + 2, y + 32, -14623512);
-                g.text(mc.font, "BARYGA HELPER  " + scanner.checked + "/" + scanner.total, x + 8, y + 5, -1575428, false);
-                g.text(mc.font, "I — результаты   F8 — стоп", x + 8, y + 18, -7953993, false);
+                g.fill(x, y, x + 180, y + 32, 0xD9101822);
+                g.fill(x, y, x + 2, y + 32, 0xFF20DCE8);
+                g.text(mc.font, "BARYGA HELPER  " + scanner.checked + "/" + scanner.total, x + 8, y + 5, 0xFFE7F5FC, false);
+                g.text(mc.font, "I — результаты   F8 — стоп", x + 8, y + 18, 0xFF86A1B7, false);
             }
         });
     }

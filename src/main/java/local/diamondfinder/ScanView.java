@@ -16,30 +16,30 @@ public final class ScanView {
     private ScanView() {
     }
 
-    public static void skip(Deque<String> var0, List<MenuScanner.Result> var1) {
-        HashSet var2 = new HashSet();
+    public static void skip(Deque<String> queue, List<MenuScanner.Result> results) {
+        Set<String> nicks = new HashSet<>();
 
-        for (String var4 : var0) {
-            var2.add(var4.toLowerCase(Locale.ROOT));
+        for (String nick : queue) {
+            nicks.add(nick.toLowerCase(Locale.ROOT));
         }
 
-        last = var2;
+        last = nicks;
         loaded = true;
         save();
-        ProfileDb.skip(var0, var1);
+        ProfileDb.skip(queue, results);
     }
 
-    public static List<MenuScanner.Result> filter(List<MenuScanner.Result> var0) {
+    public static List<MenuScanner.Result> filter(List<MenuScanner.Result> results) {
         load();
-        ArrayList var1 = new ArrayList();
+        List<MenuScanner.Result> filtered = new ArrayList<>();
 
-        for (MenuScanner.Result var3 : var0) {
-            if (var3.player != null && last.contains(var3.player.toLowerCase(Locale.ROOT)) && !Blacklist.isBlocked(var3.player)) {
-                var1.add(var3);
+        for (MenuScanner.Result result : results) {
+            if (result.player != null && last.contains(result.player.toLowerCase(Locale.ROOT)) && !Blacklist.isBlocked(result.player)) {
+                filtered.add(result);
             }
         }
 
-        return var1;
+        return filtered;
     }
 
     private static void load() {
@@ -47,37 +47,37 @@ public final class ScanView {
             loaded = true;
 
             try {
-                Path var0 = file();
-                if (Files.exists(var0)) {
-                    for (String var2 : Files.readAllLines(var0)) {
-                        if (!var2.isBlank()) {
-                            last.add(var2.trim());
+                Path path = file();
+                if (Files.exists(path)) {
+                    for (String line : Files.readAllLines(path)) {
+                        if (!line.isBlank()) {
+                            last.add(line.trim());
                         }
                     }
                 }
-            } catch (Throwable var3) {
+            } catch (Throwable ignored) {
             }
         }
     }
 
-    public static boolean known(String var0) {
+    public static boolean known(String nick) {
         load();
-        return last.contains(var0.toLowerCase(Locale.ROOT));
+        return last.contains(nick.toLowerCase(Locale.ROOT));
     }
 
-    public static void add(String var0) {
+    public static void add(String nick) {
         load();
-        if (last.add(var0.toLowerCase(Locale.ROOT))) {
+        if (last.add(nick.toLowerCase(Locale.ROOT))) {
             save();
         }
     }
 
     private static void save() {
         try {
-            Path var0 = file();
-            Files.createDirectories(var0.getParent());
-            Files.writeString(var0, String.join("\n", last) + "\n");
-        } catch (Throwable var1) {
+            Path path = file();
+            Files.createDirectories(path.getParent());
+            Files.writeString(path, String.join("\n", last) + "\n");
+        } catch (Throwable ignored) {
         }
     }
 

@@ -42,7 +42,15 @@ public final class LocalMessageLog implements AutoCloseable {
         "token",
         "email"
     );
-    public static final String DEFAULT_CONFIG = "# ShintaroHelper: local outgoing-message journal. No uploads.\n# Enable only on your own client. Settings apply on the next game launch.\nmessage.enabled=false\nmessage.chat=true\nmessage.commands=true\n# Files: logs/ShintaroHelper/message/YYYY-MM-DD.log\n# Authentication command arguments are always redacted.\n";
+    public static final String DEFAULT_CONFIG = """
+        # BarygaHelper: local outgoing-message journal. No uploads.
+        # Enable only on your own client. Settings apply on the next game launch.
+        message.enabled=false
+        message.chat=true
+        message.commands=true
+        # Files: logs/BarygaHelper/message/YYYY-MM-DD.log
+        # Authentication command arguments are always redacted.
+        """;
     private final Path directory;
     private final Clock clock;
     private final Consumer<String> error;
@@ -63,7 +71,7 @@ public final class LocalMessageLog implements AutoCloseable {
             if (!Files.exists(config)) {
                 Files.writeString(
                     config,
-                    "# ShintaroHelper: local outgoing-message journal. No uploads.\n# Enable only on your own client. Settings apply on the next game launch.\nmessage.enabled=false\nmessage.chat=true\nmessage.commands=true\n# Files: logs/ShintaroHelper/message/YYYY-MM-DD.log\n# Authentication command arguments are always redacted.\n",
+                    DEFAULT_CONFIG,
                     StandardCharsets.UTF_8,
                     StandardOpenOption.CREATE_NEW
                 );
@@ -82,7 +90,7 @@ public final class LocalMessageLog implements AutoCloseable {
         this.chat = Boolean.parseBoolean(properties.getProperty("message.chat", "true"));
         this.commands = Boolean.parseBoolean(properties.getProperty("message.commands", "true"));
         this.writer = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.SECONDS, new ArrayBlockingQueue<>(1024), r -> {
-            Thread t = new Thread(r, "ShintaroHelper-local-log");
+            Thread t = new Thread(r, "BarygaHelper-local-log");
             t.setDaemon(true);
             return t;
         }, new AbortPolicy());

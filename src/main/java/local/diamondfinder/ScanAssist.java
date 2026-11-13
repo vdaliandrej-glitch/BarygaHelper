@@ -11,6 +11,8 @@ import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.multiplayer.PlayerInfo;
 
 public final class ScanAssist {
+    private static final long RESUME_DELAY_MS = 1500L;
+    private static final long FEED_INTERVAL_MS = 2000L;
     private static ScanAssist.Pending pending;
     private static boolean ready;
     private static boolean broken;
@@ -28,162 +30,186 @@ public final class ScanAssist {
     }
 
     private static void init() throws Exception {
-        if (!ready) {
-            Class<MenuScanner> var0 = MenuScanner.class;
-            fQueue = var0.getDeclaredField("queue");
-            fCurrent = var0.getDeclaredField("current");
-            fConn = var0.getDeclaredField("connection");
-            fPhase = var0.getDeclaredField("phase");
-            fNext = var0.getDeclaredField("nextCommand");
-            fFail = var0.getDeclaredField("failures");
-
-            for (Field var4 : new Field[]{fQueue, fCurrent, fConn, fPhase, fNext, fFail}) {
-                var4.setAccessible(true);
-            }
-
-            phaseQueued = Enum.valueOf((Class)Class.forName("local.diamondfinder.MenuScanner$Phase"), "QUEUED");
-            ready = true;
+        if (ready) {
+            return;
         }
+
+        Class<MenuScanner> type = MenuScanner.class;
+        fQueue = type.getDeclaredField("queue");
+        fCurrent = type.getDeclaredField("current");
+        fConn = type.getDeclaredField("connection");
+        fPhase = type.getDeclaredField("phase");
+        fNext = type.getDeclaredField("nextCommand");
+        fFail = type.getDeclaredField("failures");
+
+        for (Field field : new Field[]{fQueue, fCurrent, fConn, fPhase, fNext, fFail}) {
+            field.setAccessible(true);
+        }
+
+        phaseQueued = MenuScanner.Phase.QUEUED;
+        ready = true;
     }
 
-    private static boolean autoReason(String var0) {
-        return var0 != null
+    @SuppressWarnings("unchecked")
+    private static Deque<String> queue(MenuScanner scanner) throws IllegalAccessException {
+        return (Deque<String>) fQueue.get(scanner);
+    }
+
+    private static boolean autoReason(String reason) {
+        return reason != null
             && (
-                var0.startsWith("Пауза: открыто другое меню")
-                    || var0.startsWith("Пауза: предмет на курсоре")
-                    || var0.startsWith("Поиск остановлен: открыто другое окно")
+                reason.startsWith("Пауза: открыто другое меню")
+                    || reason.startsWith("Пауза: предмет на курсоре")
+                    || reason.startsWith("Поиск остановлен: открыто другое окно")
             );
     }
 
-    public static void onStop(MenuScanner var0, String var1) {
+    public static void onStop(MenuScanner scanner, String reason) {
         try {
-            if (!autoReason(var1)) {
+            if (!autoReason(reason)) {
                 pending = null;
                 return;
             }
 
-            if (!var0.running()) {
+            if (!scanner.running()) {
                 return;
             }
 
             init();
-            ScanAssist.Pending var2 = new ScanAssist.Pending();
-            var2.queue = new ArrayList<>((Deque)fQueue.get(var0));
-            if (fCurrent.get(var0) instanceof MenuScanner.Result var4 && !var4.complete) {
-                var2.queue.add(0, var4.player);
-                var0.results.remove(var4);
+            ScanAssist.Pending next = new ScanAssist.Pending();
+            next.queue = new ArrayList<>(queue(scanner));
+            if (fCurrent.get(scanner) instanceof MenuScanner.Result current && !current.complete) {
+                next.queue.add(0, current.player);
+                scanner.results.remove(current);
             }
 
-            var2.connection = fConn.get(var0);
-            var2.since = System.currentTimeMillis();
-            var2.reason = var1;
-            pending = var2;
-        } catch (Throwable var5) {
+            next.connection = fConn.get(scanner);
+            next.since = System.currentTimeMillis();
+            next.reason = reason;
+            pending = next;
+        } catch (Throwable e) {
             pending = null;
         }
     }
 
     public static void tick() {
-        if (!broken) {
-            try {
-                run();
-            } catch (Throwable var1) {
-                if (++errors >= 5) {
-                    broken = true;
-                }
+        if (broken) {
+            return;
+        }
+
+        try {
+            run();
+        } catch (Throwable e) {
+            if (++errors >= 5) {
+                broken = true;
             }
         }
     }
 
     private static void run() throws Exception {
-        Minecraft var0 = Minecraft.getInstance();
-        MenuScanner var1 = DiamondFinder.scanner;
-        if (var0 != null && var0.player != null && var1 != null && DiamondFinder.allowedServer()) {
-            MatchFix.migrate(var1);
-            long var2 = System.currentTimeMillis();
-            if (var1.running()) {
-                feed(var0, var1, var2, null);
-            } else {
-                ScanAssist.Pending var4 = pending;
-                if (var4 != null) {
-                    if (!var4.noted) {
-                        var4.noted = true;
-                        var1.message = var4.reason + " · продолжу автоматически, осталось " + var4.queue.size();
-                    }
-
-                    if (var0.getConnection() != var4.connection) {
-                        pending = null;
-                    } else if (!var0.player.isAlive()) {
-                        var4.since = var2;
-                    } else {
-                        Screen var5 = var0.gui.screen();
-                        if (var5 != null && !(var5 instanceof FinderScreen)) {
-                            var4.since = var2;
-                        } else if (var0.player.containerMenu != var0.player.inventoryMenu) {
-                            var4.since = var2;
-                        } else {
-                            feed(var0, var1, var2, var4);
-                            if (var2 - var4.since >= 1500L) {
-                                if (var4.queue.isEmpty()) {
-                                    pending = null;
-                                } else {
-                                    init();
-                                    Deque var6 = (Deque)fQueue.get(var1);
-                                    var6.clear();
-                                    var6.addAll(var4.queue);
-                                    fPhase.set(var1, phaseQueued);
-                                    fConn.set(var1, var0.getConnection());
-                                    fNext.setLong(var1, 0L);
-                                    fFail.setInt(var1, 0);
-                                    var1.message = "Продолжаю скан: осталось " + var6.size();
-                                    pending = null;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+        Minecraft mc = Minecraft.getInstance();
+        MenuScanner scanner = DiamondFinder.scanner;
+        if (mc == null || mc.player == null || scanner == null || !DiamondFinder.allowedServer()) {
+            return;
         }
+
+        MatchFix.migrate(scanner);
+        long now = System.currentTimeMillis();
+        if (scanner.running()) {
+            feed(mc, scanner, now, null);
+            return;
+        }
+
+        ScanAssist.Pending resume = pending;
+        if (resume == null) {
+            return;
+        }
+
+        if (!resume.noted) {
+            resume.noted = true;
+            scanner.message = resume.reason + " · продолжу автоматически, осталось " + resume.queue.size();
+        }
+
+        if (mc.getConnection() != resume.connection) {
+            pending = null;
+            return;
+        }
+
+        Screen screen = mc.gui.screen();
+        boolean busy = !mc.player.isAlive()
+            || screen != null && !(screen instanceof FinderScreen)
+            || mc.player.containerMenu != mc.player.inventoryMenu;
+        if (busy) {
+            resume.since = now;
+            return;
+        }
+
+        feed(mc, scanner, now, resume);
+        if (now - resume.since < RESUME_DELAY_MS) {
+            return;
+        }
+
+        if (resume.queue.isEmpty()) {
+            pending = null;
+            return;
+        }
+
+        init();
+        Deque<String> queue = queue(scanner);
+        queue.clear();
+        queue.addAll(resume.queue);
+        fPhase.set(scanner, phaseQueued);
+        fConn.set(scanner, mc.getConnection());
+        fNext.setLong(scanner, 0L);
+        fFail.setInt(scanner, 0);
+        scanner.message = "Продолжаю скан: осталось " + queue.size();
+        pending = null;
     }
 
-    private static void feed(Minecraft var0, MenuScanner var1, long var2, ScanAssist.Pending var4) throws Exception {
-        if (var2 - lastFeed >= 2000L) {
-            lastFeed = var2;
-            ClientPacketListener var5 = var0.getConnection();
-            if (var5 != null) {
-                String var6 = var0.player.getGameProfile().name();
-                ArrayList<String> var7 = new ArrayList<>();
+    private static void feed(Minecraft mc, MenuScanner scanner, long now, ScanAssist.Pending resume) throws Exception {
+        if (now - lastFeed < FEED_INTERVAL_MS) {
+            return;
+        }
 
-                for (PlayerInfo var9 : var5.getOnlinePlayers()) {
-                    String var10 = var9.getProfile().name();
-                    if (var10 != null
-                        && var10.matches("[A-Za-z0-9_]{1,16}")
-                        && !var10.equalsIgnoreCase(var6)
-                        && !ScanView.known(var10)
-                        && !var7.contains(var10)) {
-                        var7.add(var10);
-                    }
-                }
+        lastFeed = now;
+        ClientPacketListener connection = mc.getConnection();
+        if (connection == null) {
+            return;
+        }
 
-                if (!var7.isEmpty()) {
-                    for (String var13 : var7) {
-                        ScanView.add(var13);
-                    }
+        String self = mc.player.getGameProfile().name();
+        List<String> fresh = new ArrayList<>();
 
-                    ArrayDeque var12 = new ArrayDeque(var7);
-                    ProfileDb.skip(var12, var1.results);
-                    if (!var12.isEmpty()) {
-                        init();
-                        if (var4 != null) {
-                            var4.queue.addAll(var12);
-                        } else {
-                            ((Deque)fQueue.get(var1)).addAll(var12);
-                        }
-
-                        var1.total = var1.total + var12.size();
-                    }
-                }
+        for (PlayerInfo info : connection.getOnlinePlayers()) {
+            String nick = info.getProfile().name();
+            if (nick != null
+                && nick.matches("[A-Za-z0-9_]{1,16}")
+                && !nick.equalsIgnoreCase(self)
+                && !ScanView.known(nick)
+                && !fresh.contains(nick)) {
+                fresh.add(nick);
             }
+        }
+
+        if (fresh.isEmpty()) {
+            return;
+        }
+
+        for (String nick : fresh) {
+            ScanView.add(nick);
+        }
+
+        Deque<String> toScan = new ArrayDeque<>(fresh);
+        ProfileDb.skip(toScan, scanner.results);
+        if (!toScan.isEmpty()) {
+            init();
+            if (resume != null) {
+                resume.queue.addAll(toScan);
+            } else {
+                queue(scanner).addAll(toScan);
+            }
+
+            scanner.total = scanner.total + toScan.size();
         }
     }
 

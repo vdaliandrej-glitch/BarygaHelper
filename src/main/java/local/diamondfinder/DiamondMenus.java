@@ -65,8 +65,8 @@ public final class DiamondMenus {
         return CosmeticText.normalize(name).replaceFirst("\\s*❖\\s*$", "").trim();
     }
 
-    public static String match(String var0, List<String> var1, Map<String, String> var2, Set<String> var3) {
-        return MatchFix.match(var0, var1, var2, var3);
+    public static String match(String name, List<String> lore, Map<String, String> byName, Set<String> keys) {
+        return MatchFix.match(name, lore, byName, keys);
     }
 
     public record Cell(int slot, String name, List<String> lore) {

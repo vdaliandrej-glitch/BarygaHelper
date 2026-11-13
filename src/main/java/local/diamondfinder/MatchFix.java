@@ -11,19 +11,20 @@ import java.util.Map;
 import java.util.Set;
 
 public final class MatchFix {
+    private static final int MAX_DUMPS = 40;
     private static int dumps;
     private static boolean migrated;
 
     private MatchFix() {
     }
 
-    private static boolean mentionsEffect(List<String> var0) {
-        if (var0 == null) {
+    private static boolean mentionsEffect(List<String> lore) {
+        if (lore == null) {
             return false;
         }
 
-        for (String var2 : var0) {
-            if (CosmeticText.normalize(var2).contains("эффект")) {
+        for (String line : lore) {
+            if (CosmeticText.normalize(line).contains("эффект")) {
                 return true;
             }
         }
@@ -31,19 +32,19 @@ public final class MatchFix {
         return false;
     }
 
-    private static boolean unavailable(String var0, List<String> var1) {
-        if (CosmeticText.clean(var0).matches(".*[✗✘✖✕❌]\\s*$")) {
+    private static boolean unavailable(String name, List<String> lore) {
+        if (CosmeticText.clean(name).matches(".*[✗✘✖✕❌]\\s*$")) {
             return true;
         }
 
-        if (var1 == null) {
+        if (lore == null) {
             return false;
         }
 
-        for (String var3 : var1) {
-            String var4 = CosmeticText.normalize(var3);
-            if (!var4.contains("эффект")
-                && (var4.contains("не получен") || var4.contains("не приобретен") || var4.contains("не приобретён") || var4.contains("нет в наличии"))) {
+        for (String line : lore) {
+            String text = CosmeticText.normalize(line);
+            if (!text.contains("эффект")
+                && (text.contains("не получен") || text.contains("не приобретен") || text.contains("не приобретён") || text.contains("нет в наличии"))) {
                 return true;
             }
         }
@@ -51,147 +52,149 @@ public final class MatchFix {
         return false;
     }
 
-    private static String strip(String var0) {
-        return var0.replaceFirst("\\s*\\([^)]*\\)\\s*$", "").replaceFirst("[^\\p{L}\\p{N}]+$", "").trim();
+    private static String strip(String name) {
+        return name.replaceFirst("\\s*\\([^)]*\\)\\s*$", "").replaceFirst("[^\\p{L}\\p{N}]+$", "").trim();
     }
 
-    private static String exact(String var0, CosmeticText.Rarity var1, Map<String, String> var2, Set<String> var3) {
-        if (var1.tradable()) {
-            String var5 = var0 + "|" + var1.name();
-            return var3.contains(var5) ? var5 : null;
-        } else {
-            String var4 = (String)var2.get(var0);
-            return var4 != null && var3.contains(var4) ? var4 : null;
+    private static String exact(String name, CosmeticText.Rarity rarity, Map<String, String> byName, Set<String> keys) {
+        if (rarity.tradable()) {
+            String key = name + "|" + rarity.name();
+            return keys.contains(key) ? key : null;
         }
+
+        String key = byName.get(name);
+        return key != null && keys.contains(key) ? key : null;
     }
 
-    private static String byName(String var0, Map<String, String> var1, Set<String> var2) {
-        String var3 = (String)var1.get(var0);
-        if (var3 != null && var2.contains(var3)) {
-            return var3;
+    private static String byName(String name, Map<String, String> byName, Set<String> keys) {
+        String direct = byName.get(name);
+        if (direct != null && keys.contains(direct)) {
+            return direct;
         }
 
-        String var4 = null;
-        int var5 = 0;
-        String var6 = var0 + "|";
+        String match = null;
+        int count = 0;
+        String prefix = name + "|";
 
-        for (String var8 : var2) {
-            if (var8.startsWith(var6)) {
-                var4 = var8;
-                if (++var5 > 1) {
+        for (String key : keys) {
+            if (key.startsWith(prefix)) {
+                match = key;
+                if (++count > 1) {
                     return null;
                 }
             }
         }
 
-        return var5 == 1 ? var4 : null;
+        return count == 1 ? match : null;
     }
 
-    public static String match(String var0, List<String> var1, Map<String, String> var2, Set<String> var3) {
-        String var4 = null;
-        String var5 = null;
-        boolean var6 = mentionsEffect(var1);
-        if (unavailable(var0, var1)) {
-            var5 = "не получен";
+    public static String match(String name, List<String> lore, Map<String, String> byName, Set<String> keys) {
+        String key = null;
+        String reason = null;
+        boolean hasEffect = mentionsEffect(lore);
+        if (unavailable(name, lore)) {
+            reason = "не получен";
         } else {
-            CosmeticText.Rarity var7 = CosmeticText.rarity(var1);
-            String var8 = DiamondMenus.baseName(var0);
-            if (var7 == CosmeticText.Rarity.EXCLUDED && !var6) {
-                var5 = "исключена из каталога";
+            CosmeticText.Rarity rarity = CosmeticText.rarity(lore);
+            String base = DiamondMenus.baseName(name);
+            if (rarity == CosmeticText.Rarity.EXCLUDED && !hasEffect) {
+                reason = "исключена из каталога";
             } else {
-                if (var7 != CosmeticText.Rarity.EXCLUDED) {
-                    var4 = exact(var8, var7, var2, var3);
+                if (rarity != CosmeticText.Rarity.EXCLUDED) {
+                    key = exact(base, rarity, byName, keys);
                 }
 
-                if (var4 == null) {
-                    var4 = byName(var8, var2, var3);
+                if (key == null) {
+                    key = byName(base, byName, keys);
                 }
 
-                if (var4 == null) {
-                    String var9 = strip(var8);
-                    if (!var9.isEmpty() && !var9.equals(var8)) {
-                        if (var7 != CosmeticText.Rarity.EXCLUDED) {
-                            var4 = exact(var9, var7, var2, var3);
+                if (key == null) {
+                    String stripped = strip(base);
+                    if (!stripped.isEmpty() && !stripped.equals(base)) {
+                        if (rarity != CosmeticText.Rarity.EXCLUDED) {
+                            key = exact(stripped, rarity, byName, keys);
                         }
 
-                        if (var4 == null) {
-                            var4 = byName(var9, var2, var3);
+                        if (key == null) {
+                            key = byName(stripped, byName, keys);
                         }
                     }
                 }
 
-                if (var4 == null) {
-                    var5 = "нет в каталоге (" + var7 + ")";
+                if (key == null) {
+                    reason = "нет в каталоге (" + rarity + ")";
                 }
             }
         }
 
-        ProfileInfo.noteMatch(var4, var0, var1);
-        if (var4 == null && var6 && dumps < 40) {
-            dump(var0, var5, var1);
+        ProfileInfo.noteMatch(key, name, lore);
+        if (key == null && hasEffect && dumps < MAX_DUMPS) {
+            dump(name, reason, lore);
         }
 
-        return var4;
+        return key;
     }
 
-    private static void dump(String var0, String var1, List<String> var2) {
+    private static void dump(String name, String reason, List<String> lore) {
         try {
             dumps++;
-            StringBuilder var3 = new StringBuilder("item: ").append(var0).append("  =>  НЕ РАСПОЗНАНА: ").append(var1).append('\n');
+            StringBuilder text = new StringBuilder("item: ").append(name).append("  =>  НЕ РАСПОЗНАНА: ").append(reason).append('\n');
 
-            for (String var5 : var2) {
-                var3.append("    ").append(var5).append('\n');
+            for (String line : lore) {
+                text.append("    ").append(line).append('\n');
             }
 
-            Path var7 = Path.of("config", "diamond-finder");
-            Files.createDirectories(var7);
-            Files.writeString(var7.resolve("unmatched-dump.txt"), var3.toString(), StandardOpenOption.CREATE, StandardOpenOption.APPEND);
-        } catch (Throwable var6) {
+            Path dir = Path.of("config", "diamond-finder");
+            Files.createDirectories(dir);
+            Files.writeString(dir.resolve("unmatched-dump.txt"), text.toString(), StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+        } catch (Throwable ignored) {
         }
     }
 
-    public static void migrate(MenuScanner var0) {
-        if (!migrated) {
-            migrated = true;
+    public static void migrate(MenuScanner scanner) {
+        if (migrated) {
+            return;
+        }
 
-            try {
-                Path var1 = Path.of("config", "diamond-finder");
-                Path var2 = var1.resolve("rescan-v2.done");
-                if (Files.exists(var2)) {
-                    return;
-                }
+        migrated = true;
 
-                Files.createDirectories(var1);
+        try {
+            Path dir = Path.of("config", "diamond-finder");
+            Path marker = dir.resolve("rescan-v2.done");
+            if (Files.exists(marker)) {
+                return;
+            }
 
-                for (MenuScanner.Result var4 : new ArrayList<>(var0.results)) {
-                    var4.time = 0L;
-                }
+            Files.createDirectories(dir);
 
-                Field var10 = Class.forName("local.diamondfinder.ProfileDb").getDeclaredField("FILE");
-                var10.setAccessible(true);
-                Path var11 = (Path)var10.get(null);
-                if (Files.exists(var11)) {
-                    ArrayList var5 = new ArrayList();
+            for (MenuScanner.Result result : new ArrayList<>(scanner.results)) {
+                result.time = 0L;
+            }
 
-                    for (String var7 : Files.readAllLines(var11)) {
-                        String[] var8 = var7.split("\t", -1);
-                        if (var8.length > 3 && var8[0].equals("v2")) {
-                            var8[2] = "0";
-                        }
+            Field fileField = ProfileDb.class.getDeclaredField("FILE");
+            fileField.setAccessible(true);
+            Path db = (Path) fileField.get(null);
+            if (Files.exists(db)) {
+                List<String> lines = new ArrayList<>();
 
-                        var5.add(String.join("\t", var8));
+                for (String line : Files.readAllLines(db)) {
+                    String[] parts = line.split("\t", -1);
+                    if (parts.length > 3 && parts[0].equals("v2")) {
+                        parts[2] = "0";
                     }
 
-                    Files.write(var11, var5);
+                    lines.add(String.join("\t", parts));
                 }
 
-                Files.writeString(var2, "ok\n");
-            } catch (Throwable var9) {
+                Files.write(db, lines);
             }
+
+            Files.writeString(marker, "ok\n");
+        } catch (Throwable ignored) {
         }
     }
 
-    static String lower(String var0) {
-        return var0 == null ? "" : var0.toLowerCase(Locale.ROOT);
+    static String lower(String text) {
+        return text == null ? "" : text.toLowerCase(Locale.ROOT);
     }
 }

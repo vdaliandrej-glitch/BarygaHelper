@@ -432,8 +432,8 @@ public final class MenuScanner {
         return System.currentTimeMillis();
     }
 
-    private void onRate(String var1) {
-        if (ProfileInfo.isRateLimit(var1) && this.current != null && this.phase == MenuScanner.Phase.PROFILE && ProfileInfo.allowRetry(this.current.player)) {
+    private void onRate(String message) {
+        if (ProfileInfo.isRateLimit(message) && this.current != null && this.phase == MenuScanner.Phase.PROFILE && ProfileInfo.allowRetry(this.current.player)) {
             this.queue.addFirst(this.current.player);
             this.results.remove(this.current);
             this.current = null;
@@ -443,7 +443,7 @@ public final class MenuScanner {
         }
     }
 
-    private enum Phase {
+    enum Phase {
         IDLE,
         QUEUED,
         PROFILE,

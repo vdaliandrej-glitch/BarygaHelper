@@ -23,6 +23,7 @@ public final class SelfImport {
     private static final long CLICK_TIMEOUT_MS = 4000L;
     private static final long SESSION_GAP_MS = 4000L;
     private static final int MAX_PAGES = 64;
+    private static final int SELECTED_SLOT = 40;
     private static boolean loaded;
     private static boolean allDone;
     private static boolean failed;
@@ -51,117 +52,135 @@ public final class SelfImport {
     }
 
     public static void tick() {
-        if (!failed) {
-            try {
-                run();
-            } catch (Throwable var1) {
-                if (++errors >= 5) {
-                    failed = true;
-                }
+        if (failed) {
+            return;
+        }
+
+        try {
+            run();
+        } catch (Throwable e) {
+            if (++errors >= 5) {
+                failed = true;
             }
         }
     }
 
     private static void run() {
         ensureLoaded();
-        if (!allDone) {
-            Minecraft var0 = Minecraft.getInstance();
-            if (var0 != null && var0.player != null && var0.gui != null && DiamondFinder.allowedServer()) {
-                MenuScanner var1 = DiamondFinder.scanner;
-                if (var1 != null && var1.running()) {
-                    resetSession();
-                } else {
-                    long var2 = System.currentTimeMillis();
-                    Screen var4 = var0.gui.screen();
-                    if (!(var4 instanceof AbstractContainerScreen)) {
-                        visible = null;
-                        if (var2 - lastContainerAt > 4000L) {
-                            ownProfile = null;
-                            profSig = "";
-                            resetSession();
-                        }
-                    } else {
-                        lastContainerAt = var2;
-                        AbstractContainerScreen var5 = (AbstractContainerScreen)var4;
-                        String var6 = var5.getTitle().getString();
-                        boolean var7 = CosmeticText.profileTitle(var6);
-                        ScanCoverage.Category var8 = DiamondMenus.category(var6);
-                        if (var7 || var8 != null) {
-                            AbstractContainerMenu var9 = var5.getMenu();
-                            String var10 = Catalog.signature(var9);
-                            if (visible == var9 && sig.equals(var10)) {
-                                if (var2 - stableAt >= 300L) {
-                                    List var11 = cells(var9);
-                                    if (var7) {
-                                        if (!var10.equals(profSig)) {
-                                            profSig = var10;
-                                            ownProfile = isOwnProfile(var11, var0);
-                                        }
-                                    } else if (DiamondMenus.categoryLayout(var11)) {
-                                        if (!Boolean.FALSE.equals(ownProfile)) {
-                                            String var12 = var8.name();
-                                            if (!done.contains(var12) && !skipped.contains(var12)) {
-                                                if (!var12.equals(sessCat)) {
-                                                    resetSession();
-                                                    sessCat = var12;
-                                                    sessLabel = label(var8);
-                                                }
+        if (allDone) {
+            return;
+        }
 
-                                                if (seenSigs.add(var10)) {
-                                                    if (++pages > 64) {
-                                                        abort("слишком много страниц");
-                                                        return;
-                                                    }
+        Minecraft mc = Minecraft.getInstance();
+        if (mc == null || mc.player == null || mc.gui == null || !DiamondFinder.allowedServer()) {
+            return;
+        }
 
-                                                    processPage(var11);
-                                                } else if (!var10.equals(clickedSig)) {
-                                                    abort("страницы зациклились");
-                                                    return;
-                                                }
+        MenuScanner scanner = DiamondFinder.scanner;
+        if (scanner != null && scanner.running()) {
+            resetSession();
+            return;
+        }
 
-                                                if (!clickedSig.isEmpty() && var10.equals(clickedSig)) {
-                                                    if (var2 - clickedAt > 4000L) {
-                                                        abort("страница не листается");
-                                                    }
-                                                } else {
-                                                    Slot var13 = MenuScanner.nextSlot(var9);
-                                                    if (DiamondMenus.lastPage(var11) || var13 == null) {
-                                                        finish();
-                                                    } else if (var0.gameMode != null && var0.player.containerMenu == var9 && var9.getCarried().isEmpty()) {
-                                                        clickedSig = var10;
-                                                        clickedAt = var2;
-                                                        var0.gameMode
-                                                            .handleContainerInput(var9.containerId, var13.index, 0, ContainerInput.PICKUP, var0.player);
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            } else {
-                                visible = var9;
-                                sig = var10;
-                                stableAt = var2;
-                            }
-                        }
-                    }
-                }
+        long now = System.currentTimeMillis();
+        Screen screen = mc.gui.screen();
+        if (!(screen instanceof AbstractContainerScreen<?> container)) {
+            visible = null;
+            if (now - lastContainerAt > SESSION_GAP_MS) {
+                ownProfile = null;
+                profSig = "";
+                resetSession();
             }
+            return;
+        }
+
+        lastContainerAt = now;
+        String title = container.getTitle().getString();
+        boolean profile = CosmeticText.profileTitle(title);
+        ScanCoverage.Category category = DiamondMenus.category(title);
+        if (!profile && category == null) {
+            return;
+        }
+
+        AbstractContainerMenu menu = container.getMenu();
+        String signature = Catalog.signature(menu);
+        if (visible != menu || !sig.equals(signature)) {
+            visible = menu;
+            sig = signature;
+            stableAt = now;
+            return;
+        }
+
+        if (now - stableAt < STABLE_MS) {
+            return;
+        }
+
+        List<DiamondMenus.Cell> cells = cells(menu);
+        if (profile) {
+            if (!signature.equals(profSig)) {
+                profSig = signature;
+                ownProfile = isOwnProfile(cells, mc);
+            }
+            return;
+        }
+
+        if (!DiamondMenus.categoryLayout(cells) || Boolean.FALSE.equals(ownProfile)) {
+            return;
+        }
+
+        String categoryName = category.name();
+        if (done.contains(categoryName) || skipped.contains(categoryName)) {
+            return;
+        }
+
+        if (!categoryName.equals(sessCat)) {
+            resetSession();
+            sessCat = categoryName;
+            sessLabel = label(category);
+        }
+
+        if (seenSigs.add(signature)) {
+            if (++pages > MAX_PAGES) {
+                abort("слишком много страниц");
+                return;
+            }
+
+            processPage(cells);
+        } else if (!signature.equals(clickedSig)) {
+            abort("страницы зациклились");
+            return;
+        }
+
+        if (!clickedSig.isEmpty() && signature.equals(clickedSig)) {
+            if (now - clickedAt > CLICK_TIMEOUT_MS) {
+                abort("страница не листается");
+            }
+            return;
+        }
+
+        Slot next = MenuScanner.nextSlot(menu);
+        if (DiamondMenus.lastPage(cells) || next == null) {
+            finish();
+        } else if (mc.gameMode != null && mc.player.containerMenu == menu && menu.getCarried().isEmpty()) {
+            clickedSig = signature;
+            clickedAt = now;
+            mc.gameMode.handleContainerInput(menu.containerId, next.index, 0, ContainerInput.PICKUP, mc.player);
         }
     }
 
-    private static void processPage(List<DiamondMenus.Cell> var0) {
+    private static void processPage(List<DiamondMenus.Cell> cells) {
         refreshCatalog();
 
-        for (DiamondMenus.Cell var2 : var0) {
-            boolean var3 = DiamondMenus.itemSlot(var2.slot());
-            boolean var4 = var2.slot() == 40 && var2.lore().stream().anyMatch(var0x -> CosmeticText.normalize(var0x).equals("используется"));
-            if (var3 || var4) {
-                String var5 = DiamondMenus.match(var2.name(), var2.lore(), unique, targets);
-                if (var5 != null) {
+        for (DiamondMenus.Cell cell : cells) {
+            boolean item = DiamondMenus.itemSlot(cell.slot());
+            boolean equipped = cell.slot() == SELECTED_SLOT
+                && cell.lore().stream().anyMatch(line -> CosmeticText.normalize(line).equals("используется"));
+            if (item || equipped) {
+                String key = DiamondMenus.match(cell.name(), cell.lore(), unique, targets);
+                if (key != null) {
                     sessFound++;
-                    if (!ProfileDb.isFound(var5)) {
-                        ProfileDb.markFound(var5);
+                    if (!ProfileDb.isFound(key)) {
+                        ProfileDb.markFound(key);
                         sessNew++;
                     }
                 }
@@ -180,9 +199,9 @@ public final class SelfImport {
         resetSession();
     }
 
-    private static void abort(String var0) {
+    private static void abort(String reason) {
         skipped.add(sessCat);
-        notifyPlayer("Импорт инвентаря (" + sessLabel + ") прерван: " + var0);
+        notifyPlayer("Импорт инвентаря (" + sessLabel + ") прерван: " + reason);
         resetSession();
     }
 
@@ -197,26 +216,22 @@ public final class SelfImport {
         clickedAt = 0L;
     }
 
-    private static String label(ScanCoverage.Category var0) {
-        switch (var0.name()) {
-            case "HATS":
-                return "голова";
-            case "BACK":
-                return "аксессуары";
-            case "PETS":
-                return "компаньоны";
-            default:
-                return var0.name();
-        }
+    private static String label(ScanCoverage.Category category) {
+        return switch (category.name()) {
+            case "HATS" -> "голова";
+            case "BACK" -> "аксессуары";
+            case "PETS" -> "компаньоны";
+            default -> category.name();
+        };
     }
 
-    private static boolean isOwnProfile(List<DiamondMenus.Cell> var0, Minecraft var1) {
-        String var2 = var1.player.getGameProfile().name().toLowerCase(Locale.ROOT);
+    private static boolean isOwnProfile(List<DiamondMenus.Cell> cells, Minecraft mc) {
+        String self = mc.player.getGameProfile().name().toLowerCase(Locale.ROOT);
 
-        for (DiamondMenus.Cell var4 : var0) {
-            if (var4.slot() <= 2) {
-                String var5 = CosmeticText.normalize(var4.name());
-                if (var5.equals(var2) || var5.endsWith(" " + var2)) {
+        for (DiamondMenus.Cell cell : cells) {
+            if (cell.slot() <= 2) {
+                String name = CosmeticText.normalize(cell.name());
+                if (name.equals(self) || name.endsWith(" " + self)) {
                     return true;
                 }
             }
@@ -225,41 +240,43 @@ public final class SelfImport {
         return false;
     }
 
-    private static List<DiamondMenus.Cell> cells(AbstractContainerMenu var0) {
-        ArrayList<DiamondMenus.Cell> var1 = new ArrayList<>();
+    private static List<DiamondMenus.Cell> cells(AbstractContainerMenu menu) {
+        List<DiamondMenus.Cell> cells = new ArrayList<>();
 
-        for (Slot var3 : Catalog.serverSlots(var0)) {
-            ItemStack var4 = var3.getItem();
-            if (!var4.isEmpty()) {
-                var1.add(new DiamondMenus.Cell(var3.index, var4.getHoverName().getString(), Catalog.lore(var4)));
+        for (Slot slot : Catalog.serverSlots(menu)) {
+            ItemStack stack = slot.getItem();
+            if (!stack.isEmpty()) {
+                cells.add(new DiamondMenus.Cell(slot.index, stack.getHoverName().getString(), Catalog.lore(stack)));
             }
         }
 
-        return var1;
+        return cells;
     }
 
     private static void refreshCatalog() {
-        Catalog var0 = DiamondFinder.catalog;
-        if (var0 != null && var0.entries.size() != catalogSize) {
-            catalogSize = var0.entries.size();
-            HashMap<String, String> var1 = new HashMap<>();
-            HashSet<String> var2 = new HashSet<>();
-
-            for (Catalog.Entry var4 : var0.entries.values()) {
-                String var5 = DiamondMenus.baseName(var4.name);
-                String var6 = var1.putIfAbsent(var5, var4.key);
-                if (var6 != null && !var6.equals(var4.key)) {
-                    var2.add(var5);
-                }
-            }
-
-            for (String var8 : var2) {
-                var1.remove(var8);
-            }
-
-            unique = var1;
-            targets = new HashSet<>(var0.entries.keySet());
+        Catalog catalog = DiamondFinder.catalog;
+        if (catalog == null || catalog.entries.size() == catalogSize) {
+            return;
         }
+
+        catalogSize = catalog.entries.size();
+        Map<String, String> byName = new HashMap<>();
+        Set<String> ambiguous = new HashSet<>();
+
+        for (Catalog.Entry entry : catalog.entries.values()) {
+            String base = DiamondMenus.baseName(entry.name);
+            String previous = byName.putIfAbsent(base, entry.key);
+            if (previous != null && !previous.equals(entry.key)) {
+                ambiguous.add(base);
+            }
+        }
+
+        for (String base : ambiguous) {
+            byName.remove(base);
+        }
+
+        unique = byName;
+        targets = new HashSet<>(catalog.entries.keySet());
     }
 
     private static Path file() {
@@ -267,24 +284,26 @@ public final class SelfImport {
     }
 
     private static void ensureLoaded() {
-        if (!loaded && DiamondFinder.catalog != null) {
-            loaded = true;
+        if (loaded || DiamondFinder.catalog == null) {
+            return;
+        }
 
-            try {
-                Path var0 = file();
-                if (Files.exists(var0)) {
-                    for (String var2 : Files.readAllLines(var0)) {
-                        if (!var2.isBlank()) {
-                            done.add(var2.trim());
-                        }
+        loaded = true;
+
+        try {
+            Path path = file();
+            if (Files.exists(path)) {
+                for (String line : Files.readAllLines(path)) {
+                    if (!line.isBlank()) {
+                        done.add(line.trim());
                     }
                 }
-            } catch (Throwable var3) {
             }
+        } catch (Throwable ignored) {
+        }
 
-            if (done.size() >= ScanCoverage.Category.values().length) {
-                allDone = true;
-            }
+        if (done.size() >= ScanCoverage.Category.values().length) {
+            allDone = true;
         }
     }
 
@@ -292,16 +311,16 @@ public final class SelfImport {
         try {
             Files.createDirectories(file().getParent());
             Files.writeString(file(), String.join("\n", done) + "\n");
-        } catch (Throwable var1) {
+        } catch (Throwable ignored) {
         }
     }
 
-    private static void notifyPlayer(String var0) {
+    private static void notifyPlayer(String message) {
         try {
-            Method var1 = DiamondFinder.class.getDeclaredMethod("notifyPlayer", String.class);
-            var1.setAccessible(true);
-            var1.invoke(null, var0);
-        } catch (Throwable var2) {
+            Method method = DiamondFinder.class.getDeclaredMethod("notifyPlayer", String.class);
+            method.setAccessible(true);
+            method.invoke(null, message);
+        } catch (Throwable ignored) {
         }
     }
 

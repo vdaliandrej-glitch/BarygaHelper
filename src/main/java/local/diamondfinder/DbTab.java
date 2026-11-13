@@ -1,9 +1,7 @@
 package local.diamondfinder;
 
-import java.lang.reflect.Constructor;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -14,159 +12,145 @@ import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.network.chat.Component;
 
 public final class DbTab {
-    static final int TEXT = -1379332;
-    static final int MUTED = -8152657;
-    static final int CYAN = -14363163;
-    static final int ROW = -15589846;
-    static final int ROW_HOVER = -14996933;
-    static final int ROW_SELECTED = -14009008;
-    static final int LINE = -13614249;
+    static final int TEXT = 0xFFEAF3FC;
+    static final int MUTED = 0xFF8399AF;
+    static final int CYAN = 0xFF24D5E5;
+    static final int ROW = 0xFF121E2A;
+    static final int ROW_HOVER = 0xFF1B2A3B;
+    static final int ROW_SELECTED = 0xFF2A3D50;
+    static final int LINE = 0xFF304357;
     static final String[] SORTS = new String[]{"Совпадения", "Косметика", "Уровень", "Дата регистрации", "Ник"};
+    private static final Pattern DMY = Pattern.compile("(\\d{1,2})[./-](\\d{1,2})[./-](\\d{2,4})");
+    private static final Pattern YMD = Pattern.compile("(\\d{4})[./-](\\d{1,2})[./-](\\d{1,2})");
     private static boolean matchAll;
     private static int sortMode;
     private static boolean sortDesc = true;
     private static String nickText = "";
     static EditBox nickBox;
-    private static Constructor<?> areaCtor;
 
     private DbTab() {
     }
 
-    public static void init(FinderScreen var0) {
+    public static void init(FinderScreen screen) {
         try {
-            EditBox var1 = new EditBox(var0.fontRef(), 0, 0, 100, 18, Component.literal("Ник"));
-            var1.setBordered(false);
-            var1.setTextColor(-1379332);
-            var1.setHint(Component.literal("Ник или привилегия…"));
-            var1.setMaxLength(32);
-            var1.setValue(nickText);
-            var1.setResponder(var1x -> {
-                nickText = var1x == null ? "" : var1x;
-                var0.resultsPage = 0;
+            EditBox box = new EditBox(screen.fontRef(), 0, 0, 100, 18, Component.literal("Ник"));
+            box.setBordered(false);
+            box.setTextColor(TEXT);
+            box.setHint(Component.literal("Ник или привилегия…"));
+            box.setMaxLength(32);
+            box.setValue(nickText);
+            box.setResponder(value -> {
+                nickText = value == null ? "" : value;
+                screen.resultsPage = 0;
             });
-            var0.addBox(var1);
-            nickBox = var1;
-        } catch (Throwable var2) {
+            screen.addBox(box);
+            nickBox = box;
+        } catch (Throwable e) {
             nickBox = null;
         }
     }
 
-    public static boolean anyFocused(EditBox var0) {
-        return var0.isFocused() || nickBox != null && nickBox.isFocused();
+    public static boolean anyFocused(EditBox search) {
+        return search.isFocused() || nickBox != null && nickBox.isFocused();
     }
 
-    static void area(FinderScreen var0, int var1, int var2, int var3, int var4, Runnable var5) {
-        try {
-            if (areaCtor == null) {
-                areaCtor = Class.forName("local.diamondfinder.FinderScreen$Area").getDeclaredConstructors()[0];
-                areaCtor.setAccessible(true);
-            }
-
-            var0.areas.add((FinderScreen.Area)areaCtor.newInstance(var1, var2, var3, var4, var5));
-        } catch (Throwable var7) {
-        }
+    static void area(FinderScreen screen, int x, int y, int width, int height, Runnable action) {
+        screen.areas.add(new FinderScreen.Area(x, y, width, height, action));
     }
 
-    private static int level(MenuScanner.Result var0) {
+    private static int level(MenuScanner.Result result) {
         try {
-            return var0.level == null ? -1 : Integer.parseInt(var0.level.trim());
-        } catch (Exception var2) {
+            return result.level == null ? -1 : Integer.parseInt(result.level.trim());
+        } catch (Exception e) {
             return -1;
         }
     }
 
-    private static long dateKey(String var0) {
-        if (var0 == null) {
+    private static long dateKey(String date) {
+        if (date == null) {
             return 0L;
         }
 
         try {
-            Matcher var1 = Pattern.compile("(\\d{1,2})[./-](\\d{1,2})[./-](\\d{2,4})").matcher(var0);
-            if (var1.find()) {
-                int var2 = Integer.parseInt(var1.group(3));
-                if (var2 < 100) {
-                    var2 += 2000;
+            Matcher m = DMY.matcher(date);
+            if (m.find()) {
+                int year = Integer.parseInt(m.group(3));
+                if (year < 100) {
+                    year += 2000;
                 }
 
-                return var2 * 10000L + Integer.parseInt(var1.group(2)) * 100L + Integer.parseInt(var1.group(1));
+                return year * 10000L + Integer.parseInt(m.group(2)) * 100L + Integer.parseInt(m.group(1));
             }
 
-            var1 = Pattern.compile("(\\d{4})[./-](\\d{1,2})[./-](\\d{1,2})").matcher(var0);
-            if (var1.find()) {
-                return Integer.parseInt(var1.group(1)) * 10000L + Integer.parseInt(var1.group(2)) * 100L + Integer.parseInt(var1.group(3));
+            m = YMD.matcher(date);
+            if (m.find()) {
+                return Integer.parseInt(m.group(1)) * 10000L + Integer.parseInt(m.group(2)) * 100L + Integer.parseInt(m.group(3));
             }
-        } catch (Exception var3) {
+        } catch (Exception ignored) {
         }
 
         return 0L;
     }
 
-    private static List<MenuScanner.Result> players(Catalog var0) {
-        ArrayList<MenuScanner.Result> var1 = new ArrayList<>();
-        Set<String> var2 = var0.selected;
-        String var3 = nickText.trim().toLowerCase(Locale.ROOT);
-        Iterator<MenuScanner.Result> var4 = DiamondFinder.scanner.results.iterator();
+    private static boolean matches(MenuScanner.Result result, Set<String> selected) {
+        if (selected.isEmpty()) {
+            return true;
+        }
 
-        while (true) {
-            MenuScanner.Result var5;
-            while (true) {
-                if (!var4.hasNext()) {
-                    Comparator<MenuScanner.Result> var9 = switch (sortMode) {
-                        case 1 -> Comparator.comparingInt((MenuScanner.Result var0x) -> var0x.owned == null ? 0 : var0x.owned.size());
-                        case 2 -> Comparator.comparingInt(DbTab::level);
-                        case 3 -> Comparator.comparingLong((MenuScanner.Result var0x) -> dateKey(var0x.regDate));
-                        case 4 -> (MenuScanner.Result var0x, MenuScanner.Result var1x) -> var1x.player.compareToIgnoreCase(var0x.player);
-                        default -> Comparator.comparingInt((MenuScanner.Result var0x) -> var0x.found.size());
-                    };
-                    if (sortDesc) {
-                        var9 = var9.reversed();
-                    }
+        if (!matchAll) {
+            return !result.found.isEmpty();
+        }
 
-                    var1.sort(var9.thenComparing((MenuScanner.Result var0x, MenuScanner.Result var1x) -> var0x.player.compareToIgnoreCase(var1x.player)));
-                    return var1;
-                }
+        for (String key : selected) {
+            if (!ProfileDb.has(result, key)) {
+                return false;
+            }
+        }
 
-                var5 = (MenuScanner.Result)var4.next();
-                if (var5.complete
-                    && (
-                        var3.isEmpty()
-                            || var5.player.toLowerCase(Locale.ROOT).contains(var3)
-                            || var5.rank != null && var5.rank.toLowerCase(Locale.ROOT).contains(var3)
-                    )) {
-                    if (var2.isEmpty()) {
-                        break;
-                    }
+        return true;
+    }
 
-                    boolean var6 = true;
-                    if (matchAll) {
-                        for (String var8 : var2) {
-                            if (!ProfileDb.has(var5, var8)) {
-                                var6 = false;
-                                break;
-                            }
-                        }
-                    } else {
-                        var6 = !var5.found.isEmpty();
-                    }
+    private static List<MenuScanner.Result> players(Catalog catalog) {
+        List<MenuScanner.Result> players = new ArrayList<>();
+        Set<String> selected = catalog.selected;
+        String query = nickText.trim().toLowerCase(Locale.ROOT);
 
-                    if (var6) {
-                        break;
-                    }
-                }
+        for (MenuScanner.Result result : DiamondFinder.scanner.results) {
+            if (!result.complete) {
+                continue;
             }
 
-            var1.add(var5);
+            boolean nameMatches = query.isEmpty()
+                || result.player.toLowerCase(Locale.ROOT).contains(query)
+                || result.rank != null && result.rank.toLowerCase(Locale.ROOT).contains(query);
+            if (nameMatches && matches(result, selected)) {
+                players.add(result);
+            }
         }
+
+        Comparator<MenuScanner.Result> order = switch (sortMode) {
+            case 1 -> Comparator.comparingInt((MenuScanner.Result r) -> r.owned == null ? 0 : r.owned.size());
+            case 2 -> Comparator.comparingInt(DbTab::level);
+            case 3 -> Comparator.comparingLong((MenuScanner.Result r) -> dateKey(r.regDate));
+            case 4 -> (MenuScanner.Result a, MenuScanner.Result b) -> b.player.compareToIgnoreCase(a.player);
+            default -> Comparator.comparingInt((MenuScanner.Result r) -> r.found.size());
+        };
+        if (sortDesc) {
+            order = order.reversed();
+        }
+
+        players.sort(order.thenComparing((MenuScanner.Result a, MenuScanner.Result b) -> a.player.compareToIgnoreCase(b.player)));
+        return players;
     }
 
-    private static void pager(FinderScreen var0, GuiGraphicsExtractor var1, int var2, int var3, int var4, int var5, Runnable var6, Runnable var7) {
-        String var8 = var4 + 1 + " / " + var5;
-        Ui.btn(var0, var1, "<", var2, var3, 24, 22, false, var4 > 0 ? var6 : () -> {});
-        var0.text(var1, var8, var2 + 32, var3 + 7, -8152657);
-        Ui.btn(var0, var1, ">", var2 + 40 + var0.textWidth(var8), var3, 24, 22, false, var4 < var5 - 1 ? var7 : () -> {});
+    private static void pager(FinderScreen screen, GuiGraphicsExtractor g, int x, int y, int page, int pages, Runnable prev, Runnable next) {
+        String text = page + 1 + " / " + pages;
+        Ui.btn(screen, g, "<", x, y, 24, 22, false, page > 0 ? prev : () -> {});
+        screen.text(g, text, x + 32, y + 7, MUTED);
+        Ui.btn(screen, g, ">", x + 40 + screen.textWidth(text), y, 24, 22, false, page < pages - 1 ? next : () -> {});
     }
 
-    public static void draw(FinderScreen var0, GuiGraphicsExtractor var1) {
-        DbTab2.draw(var0, var1);
+    public static void draw(FinderScreen screen, GuiGraphicsExtractor g) {
+        DbTab2.draw(screen, g);
     }
 }

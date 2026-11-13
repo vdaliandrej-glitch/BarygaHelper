@@ -7,95 +7,97 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.world.item.ItemStack;
 
 public final class FoundTab {
+    private static final int ROW_HEIGHT = 28;
+
     private FoundTab() {
     }
 
-    public static void draw(FinderScreen var0, GuiGraphicsExtractor var1) {
-        Catalog var2 = DiamondFinder.catalog;
-        int var3 = var0.left + var0.sidebar + 10;
-        int var4 = var0.left + var0.panelW - 10;
-        int var5 = var4 - var3;
-        int var6 = var0.top + 52;
-        int var7 = var0.top + 84;
-        int var8 = var0.top + 112;
-        int var9 = var0.top + var0.panelH - 74;
-        byte var10 = 28;
-        Ui.field(var0, var1, var3, var6, var5, var0.search, "found");
-        List<String> var11 = ProfileDb.foundKeys();
-        String var12 = var0.query == null ? "" : var0.query.trim().toLowerCase(Locale.ROOT);
-        ArrayList<String> var13 = new ArrayList<>();
+    public static void draw(FinderScreen screen, GuiGraphicsExtractor g) {
+        Catalog catalog = DiamondFinder.catalog;
+        int x = screen.left + screen.sidebar + 10;
+        int right = screen.left + screen.panelW - 10;
+        int width = right - x;
+        int searchY = screen.top + 52;
+        int headerY = screen.top + 84;
+        int listTop = screen.top + 112;
+        int listBottom = screen.top + screen.panelH - 74;
+        Ui.field(screen, g, x, searchY, width, screen.search, "found");
+        List<String> found = ProfileDb.foundKeys();
+        String query = screen.query == null ? "" : screen.query.trim().toLowerCase(Locale.ROOT);
+        List<String> shown = new ArrayList<>();
 
-        for (String var15 : var11) {
-            Catalog.Entry var16 = var2.entries.get(var15);
-            String var17 = var16 != null ? var16.name : var15;
-            if (var12.isEmpty() || var17.toLowerCase(Locale.ROOT).contains(var12)) {
-                var13.add(var15);
+        for (String key : found) {
+            Catalog.Entry entry = catalog.entries.get(key);
+            String name = entry != null ? entry.name : key;
+            if (query.isEmpty() || name.toLowerCase(Locale.ROOT).contains(query)) {
+                shown.add(key);
             }
         }
 
-        var0.text(var1, "Найдено: " + var11.size() + (var12.isEmpty() ? "" : "  ·  показано " + var13.size()), var3, var7 + 7, -1379332);
-        String var25 = "Эти предметы скрыты из поиска и фильтров";
-        var0.text(var1, var0.shorten(var25, var5 / 2), var4 - Math.min(var0.textWidth(var25), var5 / 2), var7 + 7, -8152657);
-        int var26 = Math.max(1, (var9 - var8) / var10);
-        int var27 = Math.max(1, (var13.size() + var26 - 1) / var26);
-        var0.page = Math.max(0, Math.min(var0.page, var27 - 1));
-        if (var13.isEmpty()) {
-            var0.text(
-                var1,
-                var11.isEmpty() ? "Пока пусто. Во вкладке «База» нажмите «Нашёл» у косметики, которую вы уже нашли." : "Ничего не найдено.",
-                var3 + 4,
-                var8 + 6,
-                -8152657
+        screen.text(g, "Найдено: " + found.size() + (query.isEmpty() ? "" : "  ·  показано " + shown.size()), x, headerY + 7, Ui.TEXT);
+        String hint = "Эти предметы скрыты из поиска и фильтров";
+        screen.text(g, screen.shorten(hint, width / 2), right - Math.min(screen.textWidth(hint), width / 2), headerY + 7, Ui.MUTED);
+        int perPage = Math.max(1, (listBottom - listTop) / ROW_HEIGHT);
+        int pages = Math.max(1, (shown.size() + perPage - 1) / perPage);
+        screen.page = Math.max(0, Math.min(screen.page, pages - 1));
+        if (shown.isEmpty()) {
+            screen.text(
+                g,
+                found.isEmpty() ? "Пока пусто. Во вкладке «База» нажмите «Нашёл» у косметики, которую вы уже нашли." : "Ничего не найдено.",
+                x + 4,
+                listTop + 6,
+                Ui.MUTED
             );
         }
 
-        for (int var28 = 0; var28 < var26; var28++) {
-            int var18 = var0.page * var26 + var28;
-            if (var18 >= var13.size()) {
+        for (int row = 0; row < perPage; row++) {
+            int index = screen.page * perPage + row;
+            if (index >= shown.size()) {
                 break;
             }
 
-            String var19 = (String)var13.get(var18);
-            Catalog.Entry var20 = var2.entries.get(var19);
-            int var21 = var8 + var28 * var10;
-            boolean var22 = var0.inside(var3, var21, var5, var10 - 2);
-            var1.fill(var3, var21, var4, var21 + var10 - 2, var22 ? -14996933 : -15589846);
-            if (var20 != null) {
-                CosmeticText.Rarity var23 = var20.rarityValue();
-                if (var23 != null) {
-                    var1.fill(var3, var21, var3 + 3, var21 + var10 - 2, var23.color);
+            String key = shown.get(index);
+            Catalog.Entry entry = catalog.entries.get(key);
+            int y = listTop + row * ROW_HEIGHT;
+            boolean hover = screen.inside(x, y, width, ROW_HEIGHT - 2);
+            g.fill(x, y, right, y + ROW_HEIGHT - 2, hover ? DbTab.ROW_HOVER : DbTab.ROW);
+            if (entry != null) {
+                CosmeticText.Rarity rarity = entry.rarityValue();
+                if (rarity != null) {
+                    g.fill(x, y, x + 3, y + ROW_HEIGHT - 2, rarity.color);
                 }
 
-                ItemStack var24 = var20.stack;
-                if (var24 != null && !var24.isEmpty()) {
-                    var1.item(var24, var3 + 10, var21 + 4);
+                ItemStack stack = entry.stack;
+                if (stack != null && !stack.isEmpty()) {
+                    g.item(stack, x + 10, y + 4);
                 }
             }
 
-            var0.text(var1, var0.shorten(var20 != null ? var20.name : var19, var5 - 160), var3 + 34, var21 + 9, -1379332);
-            if (var20 != null && var20.rarityValue() != null) {
-                String var31 = var20.rarityValue().label;
-                var0.text(var1, var31, var4 - 110 - var0.textWidth(var31), var21 + 9, -8152657);
+            screen.text(g, screen.shorten(entry != null ? entry.name : key, width - 160), x + 34, y + 9, Ui.TEXT);
+            if (entry != null && entry.rarityValue() != null) {
+                String label = entry.rarityValue().label;
+                screen.text(g, label, right - 110 - screen.textWidth(label), y + 9, Ui.MUTED);
             }
 
-            Ui.btn(var0, var1, "Вернуть", var4 - 100, var21 + 2, 94, var10 - 6, false, () -> ProfileDb.unmarkFound(var19));
+            Ui.btn(screen, g, "Вернуть", right - 100, y + 2, 94, ROW_HEIGHT - 6, false, () -> ProfileDb.unmarkFound(key));
         }
 
-        int var29 = var27;
-        String var30 = var0.page + 1 + " / " + var27;
-        Ui.btn(var0, var1, "<", var3, var0.top + var0.panelH - 68, 24, 22, false, var0.page > 0 ? () -> var0.page = Math.max(0, var0.page - 1) : () -> {});
-        var0.text(var1, var30, var3 + 32, var0.top + var0.panelH - 61, -8152657);
+        int lastPage = pages;
+        String pageText = screen.page + 1 + " / " + pages;
+        int bottomY = screen.top + screen.panelH - 68;
+        Ui.btn(screen, g, "<", x, bottomY, 24, 22, false, screen.page > 0 ? () -> screen.page = Math.max(0, screen.page - 1) : () -> {});
+        screen.text(g, pageText, x + 32, screen.top + screen.panelH - 61, Ui.MUTED);
         Ui.btn(
-            var0,
-            var1,
+            screen,
+            g,
             ">",
-            var3 + 40 + var0.textWidth(var30),
-            var0.top + var0.panelH - 68,
+            x + 40 + screen.textWidth(pageText),
+            bottomY,
             24,
             22,
             false,
-            var0.page < var27 - 1 ? () -> var0.page = Math.min(var29 - 1, var0.page + 1) : () -> {}
+            screen.page < pages - 1 ? () -> screen.page = Math.min(lastPage - 1, screen.page + 1) : () -> {}
         );
-        Ui.btn(var0, var1, "Проверить инвентарь", var4 - 150, var0.top + var0.panelH - 68, 150, 22, true, () -> SelfImport.recheck());
+        Ui.btn(screen, g, "Проверить инвентарь", right - 150, bottomY, 150, 22, true, SelfImport::recheck);
     }
 }

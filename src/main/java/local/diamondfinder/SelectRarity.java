@@ -3,21 +3,21 @@ package local.diamondfinder;
 public final class SelectRarity implements Runnable {
     private final CosmeticText.Rarity rarity;
 
-    public SelectRarity(CosmeticText.Rarity var1) {
-        this.rarity = var1;
+    public SelectRarity(CosmeticText.Rarity rarity) {
+        this.rarity = rarity;
     }
 
     @Override
     public void run() {
-        Catalog var1 = DiamondFinder.catalog;
-        if (var1 != null && this.rarity != null) {
-            for (Catalog.Entry var3 : var1.entries.values()) {
-                if (var3 != null && var3.key != null && var3.rarityValue() == this.rarity && !ProfileDb.isFound(var3.key)) {
-                    var1.selected.add(var3.key);
+        Catalog catalog = DiamondFinder.catalog;
+        if (catalog != null && this.rarity != null) {
+            for (Catalog.Entry entry : catalog.entries.values()) {
+                if (entry != null && entry.key != null && entry.rarityValue() == this.rarity && !ProfileDb.isFound(entry.key)) {
+                    catalog.selected.add(entry.key);
                 }
             }
 
-            var1.dirty();
+            catalog.dirty();
         }
     }
 }

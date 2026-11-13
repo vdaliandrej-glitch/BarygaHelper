@@ -39,11 +39,11 @@
 | `config/diamond-finder/players.db` | база проверенных игроков |
 | `config/diamond-finder/blacklist.txt` | чёрный список |
 | `config/diamond-finder/found.txt` | отмеченные как найденные предметы |
-| `config/ShintaroHelper.cfg` | настройки локального журнала сообщений |
+| `config/BarygaHelper.cfg` | настройки локального журнала сообщений |
 
 ### Журнал исходящих сообщений
 
-Опциональный локальный лог ваших сообщений и команд в `logs/ShintaroHelper/message/ГГГГ-ММ-ДД.log`.
+Опциональный локальный лог ваших сообщений и команд в `logs/BarygaHelper/message/ГГГГ-ММ-ДД.log`.
 **По умолчанию выключен** (`message.enabled=false`). Аргументы команд авторизации (`/login`, `/register`, `/changepassword`, `/2fa` и т. п.) всегда заменяются на `[REDACTED]`.
 
 ## Сборка из исходников

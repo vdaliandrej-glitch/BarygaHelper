@@ -5,7 +5,7 @@ import java.util.Locale;
 import java.util.regex.Pattern;
 
 public final class CosmeticText {
-    private static final Pattern FORMAT = Pattern.compile("§[0-9a-fk-orx]", 2);
+    private static final Pattern FORMAT = Pattern.compile("§[0-9a-fk-orx]", Pattern.CASE_INSENSITIVE);
 
     public static String clean(String s) {
         return FORMAT.matcher(s).replaceAll("").replace(' ', ' ').replaceAll("[\\p{Co}\\u200B-\\u200D\\uFEFF]", "").trim();
@@ -84,13 +84,13 @@ public final class CosmeticText {
     }
 
     public enum Rarity {
-        COMMON("Обычная", -5326648),
-        RARE("Редкая", -11691777),
-        EPIC("Эпическая", -4360449),
-        LEGENDARY("Легендарная", -19154),
-        MYTHIC("Мифическая", -14619195),
-        EXCLUDED("Непередаваемая", -8947849),
-        UNKNOWN("Неизвестная", -8947849);
+        COMMON("Обычная", 0xFFAEB8C8),
+        RARE("Редкая", 0xFF4D98FF),
+        EPIC("Эпическая", 0xFFBD76FF),
+        LEGENDARY("Легендарная", 0xFFFFB52E),
+        MYTHIC("Мифическая", 0xFF20EDC5),
+        EXCLUDED("Непередаваемая", 0xFF777777),
+        UNKNOWN("Неизвестная", 0xFF777777);
 
         public final String label;
         public final int color;

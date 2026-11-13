@@ -15,27 +15,27 @@ public final class Blacklist {
     private Blacklist() {
     }
 
-    public static boolean isBlocked(String var0) {
-        if (var0 == null) {
+    public static boolean isBlocked(String nick) {
+        if (nick == null) {
             return false;
         }
 
         load();
-        return !NICKS.isEmpty() && NICKS.containsKey(var0.toLowerCase(Locale.ROOT));
+        return !NICKS.isEmpty() && NICKS.containsKey(nick.toLowerCase(Locale.ROOT));
     }
 
-    public static void add(String var0) {
-        if (var0 != null && !var0.isBlank()) {
+    public static void add(String nick) {
+        if (nick != null && !nick.isBlank()) {
             load();
-            NICKS.putIfAbsent(var0.trim().toLowerCase(Locale.ROOT), var0.trim());
+            NICKS.putIfAbsent(nick.trim().toLowerCase(Locale.ROOT), nick.trim());
             save();
         }
     }
 
-    public static void remove(String var0) {
-        if (var0 != null) {
+    public static void remove(String nick) {
+        if (nick != null) {
             load();
-            if (NICKS.remove(var0.trim().toLowerCase(Locale.ROOT)) != null) {
+            if (NICKS.remove(nick.trim().toLowerCase(Locale.ROOT)) != null) {
                 save();
             }
         }
@@ -48,9 +48,9 @@ public final class Blacklist {
 
     public static List<String> list() {
         load();
-        ArrayList var0 = new ArrayList<>(NICKS.values());
-        var0.sort(String.CASE_INSENSITIVE_ORDER);
-        return var0;
+        List<String> nicks = new ArrayList<>(NICKS.values());
+        nicks.sort(String.CASE_INSENSITIVE_ORDER);
+        return nicks;
     }
 
     private static Path file() {
@@ -62,26 +62,26 @@ public final class Blacklist {
             loaded = true;
 
             try {
-                Path var0 = file();
-                if (Files.exists(var0)) {
-                    for (String var2 : Files.readAllLines(var0)) {
-                        String var3 = var2.trim();
-                        if (!var3.isEmpty()) {
-                            NICKS.putIfAbsent(var3.toLowerCase(Locale.ROOT), var3);
+                Path path = file();
+                if (Files.exists(path)) {
+                    for (String line : Files.readAllLines(path)) {
+                        String nick = line.trim();
+                        if (!nick.isEmpty()) {
+                            NICKS.putIfAbsent(nick.toLowerCase(Locale.ROOT), nick);
                         }
                     }
                 }
-            } catch (Throwable var4) {
+            } catch (Throwable ignored) {
             }
         }
     }
 
     private static void save() {
         try {
-            Path var0 = file();
-            Files.createDirectories(var0.getParent());
-            Files.writeString(var0, String.join("\n", NICKS.values()) + "\n");
-        } catch (Throwable var1) {
+            Path path = file();
+            Files.createDirectories(path.getParent());
+            Files.writeString(path, String.join("\n", NICKS.values()) + "\n");
+        } catch (Throwable ignored) {
         }
     }
 }
