@@ -26,7 +26,7 @@
 1. Установите [Fabric Loader](https://fabricmc.net/use/) ≥ 0.19.5 для Minecraft **26.2**.
 2. Положите в папку `mods`:
    - [Fabric API](https://modrinth.com/mod/fabric-api) ≥ 0.161.0;
-   - `BarygaHelper-<версия>.jar` из [Releases](../../releases).
+   - `BarygaHelper-<версия>.jar` из папки [release](release).
 3. Нужна Java 25+.
 
 ## Где лежат данные
